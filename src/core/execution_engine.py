@@ -179,6 +179,9 @@ class ExecutionEngine:
         self.total_execution_cycles = 0
         self.inference_accuracy = 0.0
         
+        # Live visualization
+        self.live_visualizer = None
+        
     def load_input_data(self, input_data: np.ndarray) -> bool:
         """Load input data into the system"""
         try:
@@ -214,9 +217,21 @@ class ExecutionEngine:
             logging.error(f"Error loading input data: {e}")
             return False
             
-    def execute_inference(self, input_data: np.ndarray) -> Dict[str, Any]:
+    def execute_inference(self, input_data: np.ndarray, enable_live_viz: bool = False) -> Dict[str, Any]:
         """Execute complete DNN inference"""
         self.system.metrics_collector.start_measurement()
+        
+        # Start live visualization if requested
+        if enable_live_viz:
+            try:
+                from ..visualization.live_viz import start_live_visualization
+                self.live_visualizer = start_live_visualization(self.chip, self.dnn_manager)
+                print("🔄 Live visualization started! Monitor your execution in real-time...")
+                import time
+                time.sleep(1)  # Give a moment for setup
+            except ImportError:
+                print("⚠️  Live visualization not available")
+                self.live_visualizer = None
         
         # Load input data
         if not self.load_input_data(input_data):
@@ -250,13 +265,22 @@ class ExecutionEngine:
             
             # Execute layer
             start_cycle = self.system.global_cycle
-            layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data)
+            
+            # Update live visualization
+            if self.live_visualizer:
+                self.live_visualizer.update_layer_progress(layer_idx, 0.0)
+                
+            layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
             
             # Advance timing properly
             estimated_cycles = 100 + layer_idx * 50  # Basic estimation
             self.system.timing_model.advance_global_clock(estimated_cycles)
             self.system.global_cycle = self.system.timing_model.global_cycle
             end_cycle = self.system.global_cycle
+            
+            # Update live visualization with completion
+            if self.live_visualizer:
+                self.live_visualizer.update_layer_progress(layer_idx, 1.0)
             
             # Record layer execution
             layer_execution_info = {
@@ -281,6 +305,11 @@ class ExecutionEngine:
                 
         # Complete metrics collection
         total_time = self.system.metrics_collector.end_measurement()
+        
+        # Stop live visualization
+        if self.live_visualizer:
+            self.live_visualizer.stop_live_monitoring()
+            print("\n✅ Live visualization stopped. Execution completed!")
         
         # Generate final results
         final_output = intermediate_data
@@ -352,7 +381,7 @@ class ExecutionEngine:
                 
         return layer_programs
         
-    def _execute_layer_with_timing(self, layer_config: Dict, input_data: np.ndarray) -> np.ndarray:
+    def _execute_layer_with_timing(self, layer_config: Dict, input_data: np.ndarray, layer_idx: int = 0) -> np.ndarray:
         """Execute single layer with cycle-accurate timing"""
         layer_type = layer_config['type']
         
@@ -434,6 +463,22 @@ class ExecutionEngine:
                             
                             # Take first output as result
                             output_data[oh, ow, oc] = crossbar_result[0] if len(crossbar_result) > 0 else 0.0
+                            
+                            # Update live visualization for crossbar activity
+                            if self.live_visualizer:
+                                xb_stats = crossbar.get_statistics()
+                                # Find crossbar indices (simplified - use first available)
+                                for st_idx, supertile in enumerate(self.chip.supertiles):
+                                    for t_idx, tile in enumerate(supertile.tiles):
+                                        for xb_idx, xbar in enumerate(tile.crossbars):
+                                            if xbar == crossbar:
+                                                progress = (oh * out_w + ow + 1) / (out_h * out_w)
+                                                self.live_visualizer.update_crossbar_activity(
+                                                    st_idx, t_idx, xb_idx, 
+                                                    xb_stats.get('total_operations', 0),
+                                                    min(1.0, progress)
+                                                )
+                                                break
                             
                         # Simulate timing
                         if hasattr(self.system, 'timing_model'):

@@ -196,7 +196,7 @@ def run_simulation(args):
         test_input = np.random.randn(*dnn_config.input_shape)
         
         try:
-            result = execution_engine.execute_inference(test_input)
+            result = execution_engine.execute_inference(test_input, enable_live_viz=args.live_viz)
             
             if result['success']:
                 print("   ✓ Inference completed successfully!")
@@ -272,6 +272,18 @@ def run_simulation(args):
         except Exception as e:
             logging.warning(f"Could not generate visualizations: {e}")
     
+    # Launch architecture explorer if requested
+    if args.explore_arch:
+        print("\n🏗️  Launching Interactive Architecture Explorer...")
+        try:
+            from visualization.architecture_viz import start_architecture_explorer
+            start_architecture_explorer(chip)
+        except ImportError:
+            from visualization.live_viz import start_architecture_explorer
+            start_architecture_explorer(chip)
+        except Exception as e:
+            logging.warning(f"Could not start architecture explorer: {e}")
+    
     print("\n" + "=" * 60)
     print("Simulation completed successfully!")
     print("=" * 60)
@@ -288,14 +300,20 @@ Examples:
   # Run basic simulation with default config
   python main.py --execute --visualize
   
+  # Run with live visualization (real-time monitoring)
+  python main.py --execute --live-viz
+  
+  # Explore chip architecture interactively
+  python main.py --explore-arch
+  
   # Run with custom configuration
   python main.py --config my_config.json --execute --output results.json
   
-  # Run cycle-accurate simulation
-  python main.py --execute --cycle-accurate --max-cycles 100000
+  # Run cycle-accurate simulation with live monitoring
+  python main.py --execute --cycle-accurate --live-viz --max-cycles 100000
   
-  # Generate only architecture visualization
-  python main.py --visualize --output arch_viz
+  # Generate comprehensive analysis with architecture exploration
+  python main.py --execute --visualize --explore-arch
         """
     )
     
@@ -320,6 +338,10 @@ Examples:
                        help='Logging level')
     parser.add_argument('--log-file', type=str,
                        help='Log file path')
+    parser.add_argument('--live-viz', action='store_true',
+                       help='Enable live visualization during execution')
+    parser.add_argument('--explore-arch', action='store_true',
+                       help='Launch interactive architecture explorer')
     
     args = parser.parse_args()
     

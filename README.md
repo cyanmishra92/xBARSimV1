@@ -57,6 +57,13 @@ python examples/demo_models.py
 - **Automatic Mapping**: DNN-to-hardware mapping with capacity validation
 - **Performance Optimization**: Hardware recommendations for given DNNs
 
+### ✅ **Advanced Visualization & Monitoring** 🆕
+- **Live Visualization**: Real-time monitoring during execution with `--live-viz`
+- **Interactive Architecture Explorer**: Menu-driven hardware exploration with `--explore-arch`
+- **Comprehensive Text Reports**: Detailed hardware analysis, bottleneck identification, energy breakdown
+- **Hardware Activity Tracking**: Live crossbar operations, ADC/DAC usage, memory operations
+- **Performance Profiling**: Layer execution timelines, utilization charts, optimization recommendations
+
 ### ✅ **Simulation Features**
 - **Cycle-Accurate Timing**: Precise modeling of all hardware components
 - **Energy Modeling**: Power consumption tracking for all operations
@@ -109,12 +116,34 @@ pip install -r requirements.txt
 
 ## 🚀 Quick Examples
 
-### Example 1: Basic Simulation
+### Example 1: Live Visualization (Real-time Monitoring) 🆕
 ```bash
-python main.py --execute --visualize --output results.json
+# Basic live visualization
+python main.py --execute --live-viz
+
+# Live visualization with comprehensive analysis
+python main.py --execute --live-viz --visualize --verbose
 ```
 
-### Example 2: Custom Hardware
+### Example 2: Interactive Architecture Explorer 🆕
+```bash
+# Explore chip architecture interactively
+python main.py --explore-arch
+
+# Combined: execution + live monitoring + architecture exploration
+python main.py --execute --live-viz --explore-arch
+```
+
+### Example 3: Comprehensive Analysis & Reporting 🆕
+```bash
+# Generate detailed hardware analysis report
+python main.py --execute --visualize --output results.json
+
+# Full analysis with all visualization features
+python main.py --execute --live-viz --visualize --verbose --output complete_analysis.json
+```
+
+### Example 4: Custom Hardware
 ```python
 from src import *
 
@@ -129,10 +158,44 @@ dnn_config = create_simple_cnn(input_shape=(16, 16, 1), num_classes=5)
 result = quick_simulation(execute_inference=True)
 ```
 
-### Example 3: Multiple Models
+### Example 5: Multiple Models
 ```bash
 python examples/demo_models.py
 ```
+
+## 🎯 New Visualization Features
+
+### 🔄 Live Visualization
+Monitor your ReRAM execution in real-time:
+- **Layer Progress**: See execution progress for each DNN layer
+- **Hardware Activity**: Live crossbar operations and utilization
+- **Memory Monitoring**: Real-time buffer access patterns and latencies
+- **Performance Metrics**: Operations per second, energy consumption
+
+```bash
+python main.py --execute --live-viz
+```
+
+### 🏗️ Interactive Architecture Explorer
+Explore your hardware configuration:
+- **Chip Overview**: Total crossbars, memory hierarchy, capacity
+- **Component Details**: Drill down into SuperTiles, Tiles, Crossbars
+- **Live Statistics**: Real-time hardware utilization and operation counts
+- **Memory Analysis**: Buffer utilization and access patterns
+
+```bash
+python main.py --explore-arch
+```
+
+### 📊 Comprehensive Hardware Analysis
+Get detailed insights into:
+- **Crossbar Operations**: Individual crossbar activity tracking
+- **ADC/DAC Usage**: Analog-digital conversion statistics  
+- **Memory Operations**: Buffer access patterns and latencies
+- **Bottleneck Analysis**: Performance optimization recommendations
+- **Energy Breakdown**: Component-wise power consumption
+
+See [VISUALIZATION.md](VISUALIZATION.md) for complete documentation.
 
 ## 📚 Detailed Documentation
 
