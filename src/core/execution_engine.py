@@ -224,13 +224,24 @@ class ExecutionEngine:
         # Start live visualization if requested
         if enable_live_viz:
             try:
-                from ..visualization.live_viz import start_live_visualization
+                # Try relative import first (when running as package)
+                try:
+                    from ..visualization.live_viz import start_live_visualization
+                except ImportError:
+                    # Fallback to absolute import (when running main.py)
+                    import sys
+                    import os
+                    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    if parent_dir not in sys.path:
+                        sys.path.insert(0, parent_dir)
+                    from visualization.live_viz import start_live_visualization
+                
                 self.live_visualizer = start_live_visualization(self.chip, self.dnn_manager)
                 print("🔄 Live visualization started! Monitor your execution in real-time...")
                 import time
                 time.sleep(1)  # Give a moment for setup
-            except ImportError:
-                print("⚠️  Live visualization not available")
+            except ImportError as e:
+                print(f"⚠️  Live visualization not available: {e}")
                 self.live_visualizer = None
         
         # Load input data
