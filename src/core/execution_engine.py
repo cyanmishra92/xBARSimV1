@@ -249,7 +249,7 @@ class ExecutionEngine:
             layer_config = self.dnn_manager.dnn_config.layers[layer_idx]
             logging.info(f"Executing layer {layer_idx}: {layer_config.layer_type.value}")
             
-            # Load program into microcontroller
+            # Load program into microcontroller (this resets scheduler state)
             self.system.microcontroller.load_program(layer_program)
             
             # Create layer dict for execution
@@ -269,13 +269,29 @@ class ExecutionEngine:
             # Update live visualization
             if self.live_visualizer:
                 self.live_visualizer.update_layer_progress(layer_idx, 0.0)
-                
-            layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
             
-            # Advance timing properly
-            estimated_cycles = 100 + layer_idx * 50  # Basic estimation
-            self.system.timing_model.advance_global_clock(estimated_cycles)
-            self.system.global_cycle = self.system.timing_model.global_cycle
+            # Execute microcontroller program for this layer
+            if self.config.enable_cycle_accurate_simulation and layer_program:
+                # Run microcontroller to execute the instruction program
+                mcu_result = self.system.microcontroller.run_until_completion(max_cycles=5000)
+                mcu_cycles = mcu_result['total_cycles']
+                logging.info(f"Microcontroller executed {mcu_result['instructions_executed']} instructions in {mcu_cycles} cycles")
+                
+                # Execute the actual layer computation (hardware simulation)
+                layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
+                
+                # Use microcontroller cycles for timing
+                self.system.timing_model.advance_global_clock(mcu_cycles)
+                self.system.global_cycle = self.system.timing_model.global_cycle
+            else:
+                # Direct execution without detailed microcontroller simulation
+                layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
+                
+                # Use estimated cycles for timing
+                estimated_cycles = 100 + layer_idx * 50  # Basic estimation
+                self.system.timing_model.advance_global_clock(estimated_cycles)
+                self.system.global_cycle = self.system.timing_model.global_cycle
+                
             end_cycle = self.system.global_cycle
             
             # Update live visualization with completion

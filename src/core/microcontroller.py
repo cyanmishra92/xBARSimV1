@@ -125,18 +125,19 @@ class TaskScheduler:
         }
 
 class Pipeline:
-    """Instruction pipeline"""
+    """Simplified instruction pipeline"""
     def __init__(self, config: MCUConfig):
         self.config = config
-        self.stages = [[] for _ in range(config.pipeline_stages)]
-        self.stage_names = ["FETCH", "DECODE", "EXECUTE", "MEMORY", "WRITEBACK"]
+        # Simple 3-stage pipeline: FETCH, EXECUTE, WRITEBACK
+        self.stages = [[] for _ in range(3)]
+        self.stage_names = ["FETCH", "EXECUTE", "WRITEBACK"]
         self.current_cycle = 0
         self.stall_cycles = 0
-        self.branch_mispredictions = 0
+        self.completed_instructions = 0
         
     def can_issue(self) -> bool:
         """Check if pipeline can issue new instruction"""
-        return len(self.stages[0]) < 1  # Only one instruction per stage
+        return len(self.stages[0]) == 0  # Fetch stage must be empty
         
     def issue_instruction(self, instruction: Instruction) -> bool:
         """Issue instruction to pipeline"""
@@ -148,7 +149,7 @@ class Pipeline:
         return False
         
     def tick(self) -> Dict[str, Any]:
-        """Process one pipeline cycle"""
+        """Process one pipeline cycle - simplified"""
         self.current_cycle += 1
         events = {
             'cycle': self.current_cycle,
@@ -156,82 +157,37 @@ class Pipeline:
             'pipeline_stages': []
         }
         
-        # Process stages in reverse order (writeback to fetch)
-        for stage_idx in range(len(self.stages) - 1, -1, -1):
-            stage_events = []
-            
-            if stage_idx == len(self.stages) - 1:
-                # Writeback stage - complete instructions
-                for instruction in self.stages[stage_idx]:
-                    instruction.completion_cycle = self.current_cycle
-                    instruction.state = ExecutionState.COMPLETED
-                    events['completed_instructions'].append(instruction.inst_id)
-                    stage_events.append(f"Completed inst {instruction.inst_id}")
-                self.stages[stage_idx] = []
+        # Stage 2: WRITEBACK - Complete instructions
+        if self.stages[2]:
+            for instruction in self.stages[2]:
+                instruction.completion_cycle = self.current_cycle
+                instruction.state = ExecutionState.COMPLETED
+                events['completed_instructions'].append(instruction.inst_id)
+                self.completed_instructions += 1
+            self.stages[2] = []
+        
+        # Stage 1: EXECUTE -> WRITEBACK
+        if self.stages[1]:
+            # Move from execute to writeback
+            self.stages[2] = self.stages[1]
+            self.stages[1] = []
+            for instruction in self.stages[2]:
+                instruction.state = ExecutionState.EXECUTING
+        
+        # Stage 0: FETCH -> EXECUTE  
+        if self.stages[0]:
+            # Move from fetch to execute
+            self.stages[1] = self.stages[0]
+            self.stages[0] = []
+            for instruction in self.stages[1]:
+                instruction.state = ExecutionState.EXECUTING
                 
-            elif stage_idx == len(self.stages) - 2:
-                # Memory stage - simulate memory access
-                new_stage = []
-                for instruction in self.stages[stage_idx]:
-                    # Simulate memory access latency if needed
-                    if instruction.inst_type in [InstructionType.LOAD_WEIGHTS, 
-                                               InstructionType.LOAD_INPUT, 
-                                               InstructionType.STORE_OUTPUT]:
-                        # Memory instruction - may take multiple cycles
-                        if hasattr(instruction, 'memory_cycles_remaining'):
-                            instruction.memory_cycles_remaining -= 1
-                            if instruction.memory_cycles_remaining > 0:
-                                new_stage.append(instruction)  # Still processing
-                                continue
-                        else:
-                            # First cycle of memory instruction
-                            instruction.memory_cycles_remaining = 2  # Assume 2 cycle memory access
-                            new_stage.append(instruction)
-                            continue
-                    
-                    # Move to next stage
-                    stage_events.append(f"Memory access inst {instruction.inst_id}")
-                self.stages[stage_idx] = new_stage
-                
-            elif stage_idx > 0:
-                # Middle stages - advance instructions
-                advancing_instructions = self.stages[stage_idx]
-                self.stages[stage_idx] = []
-                
-                for instruction in advancing_instructions:
-                    if stage_idx == 1:  # Decode stage
-                        instruction.state = ExecutionState.DECODING
-                    elif stage_idx == 2:  # Execute stage
-                        instruction.state = ExecutionState.EXECUTING
-                        
-                    stage_events.append(f"Stage {self.stage_names[stage_idx]} inst {instruction.inst_id}")
-                    
-            events['pipeline_stages'].append({
-                'stage': self.stage_names[stage_idx],
-                'events': stage_events
-            })
-            
-        # Move instructions between stages
-        for stage_idx in range(len(self.stages) - 1, 0, -1):
-            if stage_idx < len(self.stages) - 1:
-                # Add instructions from previous stage (if that stage is not stalled)
-                prev_stage_instructions = self.stages[stage_idx - 1]
-                if prev_stage_instructions and not self._is_stage_stalled(stage_idx):
-                    self.stages[stage_idx].extend(prev_stage_instructions)
-                    self.stages[stage_idx - 1] = []
-                    
         return events
         
-    def _is_stage_stalled(self, stage_idx: int) -> bool:
-        """Check if stage is stalled"""
-        # Simple stall detection - stage is full
-        return len(self.stages[stage_idx]) >= 1
-        
     def flush(self):
-        """Flush pipeline (for branch misprediction)"""
+        """Flush pipeline"""
         for stage in self.stages:
             stage.clear()
-        self.branch_mispredictions += 1
         
     def get_statistics(self) -> Dict:
         """Get pipeline statistics"""
@@ -239,8 +195,8 @@ class Pipeline:
         return {
             'current_cycle': self.current_cycle,
             'instructions_in_pipeline': total_instructions,
+            'completed_instructions': self.completed_instructions,
             'stall_cycles': self.stall_cycles,
-            'branch_mispredictions': self.branch_mispredictions,
             'pipeline_utilization': total_instructions / len(self.stages)
         }
 
@@ -272,10 +228,28 @@ class Microcontroller:
         self.buffer_manager = buffer_manager
         self.compute_manager = compute_manager
         
+    def reset(self):
+        """Reset microcontroller state"""
+        self.current_cycle = 0
+        self.program_counter = 0
+        self.total_cycles = 0
+        
+        # Reset scheduler
+        self.scheduler = TaskScheduler()
+        
+        # Reset pipeline
+        self.pipeline = Pipeline(self.config)
+        
+        # Keep cumulative statistics
+        # self.total_instructions_executed and self.energy_consumption are preserved
+        
     def load_program(self, instructions: List[Instruction]):
         """Load instruction sequence"""
         self.current_program = instructions
         self.program_counter = 0
+        
+        # Reset scheduler state for new program
+        self.scheduler = TaskScheduler()
         
         # Add all instructions to scheduler
         for instruction in instructions:
@@ -380,9 +354,93 @@ class Microcontroller:
                 instructions.append(store_output_inst)
                 
         elif layer_type == 'dense':
-            # Similar structure for dense layer
-            # (Implementation details similar to conv2d but simpler)
-            pass
+            # Dense layer instruction sequence
+            
+            # 1. Load weights into crossbars
+            if weight_data is not None:
+                load_weights_inst = Instruction(
+                    inst_id=inst_id,
+                    inst_type=InstructionType.LOAD_WEIGHTS,
+                    operands={
+                        'weight_data': weight_data,
+                        'target_crossbars': layer_config.get('target_crossbars', [])
+                    },
+                    estimated_cycles=8
+                )
+                instructions.append(load_weights_inst)
+                inst_id += 1
+                
+                # 2. Load input data
+                load_input_inst = Instruction(
+                    inst_id=inst_id,
+                    inst_type=InstructionType.LOAD_INPUT,
+                    operands={
+                        'source_buffer': input_buffer,
+                        'input_shape': layer_config['input_shape']
+                    },
+                    dependencies=[load_weights_inst.inst_id],
+                    estimated_cycles=4
+                )
+                instructions.append(load_input_inst)
+                inst_id += 1
+                
+                # 3. Perform crossbar computation (matrix-vector multiply)
+                xbar_compute_inst = Instruction(
+                    inst_id=inst_id,
+                    inst_type=InstructionType.XBAR_COMPUTE,
+                    operands={
+                        'operation': 'matrix_vector_multiply',
+                        'input_size': layer_config['input_shape'][-1] if layer_config['input_shape'] else 1,
+                        'output_size': layer_config['output_shape'][-1] if layer_config['output_shape'] else 1
+                    },
+                    dependencies=[load_input_inst.inst_id],
+                    estimated_cycles=15
+                )
+                instructions.append(xbar_compute_inst)
+                inst_id += 1
+                
+                # 4. Shift and add for multi-bit results
+                shift_add_inst = Instruction(
+                    inst_id=inst_id,
+                    inst_type=InstructionType.SHIFT_ADD,
+                    operands={
+                        'bit_precision': layer_config.get('precision', 8)
+                    },
+                    dependencies=[xbar_compute_inst.inst_id],
+                    estimated_cycles=4
+                )
+                instructions.append(shift_add_inst)
+                inst_id += 1
+                
+                # 5. Apply activation function
+                if 'activation' in layer_config and layer_config['activation']:
+                    activation_inst = Instruction(
+                        inst_id=inst_id,
+                        inst_type=InstructionType.ACTIVATION,
+                        operands={
+                            'activation_type': layer_config['activation']
+                        },
+                        dependencies=[shift_add_inst.inst_id],
+                        estimated_cycles=3
+                    )
+                    instructions.append(activation_inst)
+                    inst_id += 1
+                    last_compute_inst = activation_inst
+                else:
+                    last_compute_inst = shift_add_inst
+                    
+                # 6. Store output
+                store_output_inst = Instruction(
+                    inst_id=inst_id,
+                    inst_type=InstructionType.STORE_OUTPUT,
+                    operands={
+                        'target_buffer': output_buffer,
+                        'output_shape': layer_config['output_shape']
+                    },
+                    dependencies=[last_compute_inst.inst_id],
+                    estimated_cycles=3
+                )
+                instructions.append(store_output_inst)
             
         elif layer_type == 'pooling':
             # Pooling layer
