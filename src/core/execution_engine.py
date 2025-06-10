@@ -12,6 +12,7 @@ from .memory_system import BufferManager, MemoryConfig, MemoryType
 from .compute_units import ComputeUnitManager, ComputeUnitConfig, ActivationType, PoolingType
 from .interconnect import InterconnectNetwork, InterconnectConfig, InterconnectTopology, TimingModel
 from .metrics import MetricsCollector, PerformanceProfiler
+from .peripherals import ADCConfig, DACConfig, SenseAmplifierConfig, DriverConfig
 
 @dataclass
 class ExecutionConfig:
@@ -538,6 +539,18 @@ class ExecutionEngine:
                             # Perform matrix-vector multiplication
                             crossbar_result = crossbar.matrix_vector_multiply(patch)
                             
+                            # Simulate ADC/DAC operations for each crossbar computation
+                            # Each crossbar operation requires DAC for input and ADC for output
+                            if hasattr(crossbar, 'dac_conversions'):
+                                crossbar.dac_conversions = getattr(crossbar, 'dac_conversions', 0) + len(patch)
+                            else:
+                                crossbar.dac_conversions = len(patch)
+                                
+                            if hasattr(crossbar, 'adc_conversions'):
+                                crossbar.adc_conversions = getattr(crossbar, 'adc_conversions', 0) + len(crossbar_result)
+                            else:
+                                crossbar.adc_conversions = len(crossbar_result)
+                            
                             # Take first output as result
                             output_data[oh, ow, oc] = crossbar_result[0] if len(crossbar_result) > 0 else 0.0
                             
@@ -713,13 +726,51 @@ class ExecutionEngine:
             
     def _collect_system_statistics(self) -> Dict[str, Any]:
         """Collect comprehensive system statistics"""
+        # Debug: Check crossbar operations and ADC/DAC conversions directly
+        total_crossbar_ops_debug = 0
+        total_adc_conversions = 0
+        total_dac_conversions = 0
+        
+        for supertile in self.chip.supertiles:
+            for tile in supertile.tiles:
+                for crossbar in tile.crossbars:
+                    crossbar_ops = crossbar.get_statistics()['total_operations']
+                    total_crossbar_ops_debug += crossbar_ops
+                    
+                    # Count ADC/DAC conversions we added
+                    adc_conv = getattr(crossbar, 'adc_conversions', 0)
+                    dac_conv = getattr(crossbar, 'dac_conversions', 0)
+                    total_adc_conversions += adc_conv
+                    total_dac_conversions += dac_conv
+                    
+                    if crossbar_ops > 0:
+                        logging.info(f"Debug: Crossbar ops={crossbar_ops}, ADC={adc_conv}, DAC={dac_conv}")
+        
+        logging.info(f"Debug: Total - Crossbar ops: {total_crossbar_ops_debug}, ADC: {total_adc_conversions}, DAC: {total_dac_conversions}")
+        
+        # Get chip statistics with corrected crossbar operations
+        chip_stats = self.chip.get_total_statistics()
+        
+        # Override crossbar operations with our debug count (the correct one)
+        if 'performance' in chip_stats:
+            chip_stats['performance']['total_crossbar_operations'] = total_crossbar_ops_debug
+            
+        # Add ADC/DAC conversion statistics
+        peripheral_stats = {
+            'adc_conversions': total_adc_conversions,
+            'dac_conversions': total_dac_conversions,
+            'total_analog_digital_conversions': total_adc_conversions + total_dac_conversions
+        }
+        
         return {
-            'chip_statistics': self.chip.get_total_statistics(),
+            'chip_statistics': chip_stats,
             'memory_statistics': self.system.buffer_manager.get_all_statistics(),
             'compute_statistics': self.system.compute_manager.get_all_statistics(),
             'interconnect_statistics': self.system.interconnect.get_network_statistics(),
             'microcontroller_statistics': self.system.microcontroller.get_statistics(),
-            'timing_statistics': self.system.timing_model.get_timing_statistics()
+            'timing_statistics': self.system.timing_model.get_timing_statistics(),
+            'peripheral_statistics': peripheral_stats,
+            'debug_crossbar_ops': total_crossbar_ops_debug
         }
         
     def run_system_integration_test(self) -> Dict[str, Any]:

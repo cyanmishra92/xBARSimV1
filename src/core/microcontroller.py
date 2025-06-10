@@ -642,6 +642,8 @@ class Microcontroller:
     def run_until_completion(self, max_cycles: int = 10000) -> Dict[str, Any]:
         """Run microcontroller until all instructions complete"""
         execution_log = []
+        initial_instructions = self.total_instructions_executed
+        initial_cycles = self.total_cycles
         
         while (self.current_cycle < max_cycles and 
                (len(self.scheduler.ready_queue) > 0 or 
@@ -651,16 +653,23 @@ class Microcontroller:
             cycle_events = self.tick()
             execution_log.append(cycle_events)
             
-            # Optional: print progress
-            if self.current_cycle % 100 == 0:
-                print(f"Cycle {self.current_cycle}: "
+            # Optional: print progress (reduced frequency)
+            if self.current_cycle % 500 == 0 and self.current_cycle > 0:
+                logging.debug(f"MCU Cycle {self.current_cycle}: "
                       f"Ready: {len(self.scheduler.ready_queue)}, "
                       f"Waiting: {len(self.scheduler.waiting_queue)}, "
                       f"Executing: {len(self.scheduler.executing_queue)}")
+        
+        # Ensure instruction and cycle counts are properly accumulated
+        instructions_this_run = self.total_instructions_executed - initial_instructions
+        cycles_this_run = self.total_cycles - initial_cycles
+        
+        logging.info(f"MCU completed: {instructions_this_run} instructions in {cycles_this_run} cycles")
+        logging.info(f"MCU totals: {self.total_instructions_executed} instructions, {self.total_cycles} cycles")
                       
         return {
-            'total_cycles': self.current_cycle,
-            'instructions_executed': self.total_instructions_executed,
+            'total_cycles': cycles_this_run,
+            'instructions_executed': instructions_this_run,
             'energy_consumption': self.energy_consumption,
             'execution_log': execution_log,
             'final_stats': self.get_statistics()
@@ -668,10 +677,15 @@ class Microcontroller:
         
     def get_statistics(self) -> Dict:
         """Get comprehensive microcontroller statistics"""
+        ipc = self.total_instructions_executed / max(self.total_cycles, 1)
+        
+        # Debug logging for IPC calculation
+        logging.info(f"Debug MCU: instructions={self.total_instructions_executed}, cycles={self.total_cycles}, IPC={ipc}")
+        
         return {
             'total_cycles': self.total_cycles,
             'total_instructions_executed': self.total_instructions_executed,
-            'instructions_per_cycle': self.total_instructions_executed / max(self.total_cycles, 1),
+            'instructions_per_cycle': ipc,
             'energy_consumption': self.energy_consumption,
             'average_power': self.energy_consumption / max(self.total_cycles, 1),
             'pipeline_stats': self.pipeline.get_statistics(),

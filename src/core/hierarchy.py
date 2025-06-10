@@ -103,22 +103,59 @@ class ProcessingTile:
         # Create local buffer
         self.local_buffer = LocalBuffer(config.local_buffer_size, config.local_buffer_type)
         
-        # Create peripheral manager
+        # Create peripheral manager with edge-optimized configurations
         crossbar_size = (config.crossbar_config.rows, config.crossbar_config.cols)
         total_rows = crossbar_size[0] * config.crossbars_per_tile
         total_cols = crossbar_size[1] * config.crossbars_per_tile
+        
+        # Edge-optimized peripheral configurations
+        edge_adc_config = ADCConfig(
+            resolution=8,  # 8-bit for edge inference
+            conversion_time=20e-9,  # 20ns
+            power_consumption=250e-6,  # 250μW
+            input_range=(0.0, 1.8)  # 1.8V supply
+        )
+        
+        edge_dac_config = DACConfig(
+            resolution=6,  # 6-bit for input quantization
+            settling_time=5e-9,  # 5ns
+            power_consumption=150e-6,  # 150μW
+            output_range=(0.0, 1.8)  # 1.8V supply
+        )
+        
+        edge_sense_amp_config = SenseAmplifierConfig(
+            gain=1000.0,  # High gain for ReRAM currents
+            power_consumption=50e-6,  # 50μW
+            sensing_time=2e-9,  # 2ns
+            current_range=(100e-9, 100e-6)  # 100nA to 100μA
+        )
+        
+        edge_driver_config = DriverConfig(
+            output_voltage_range=(0.0, 2.5),  # 2.5V for ReRAM
+            power_consumption=300e-6,  # 300μW
+            rise_time=2e-9,  # 2ns
+            compliance_current=100e-6  # 100μA
+        )
         
         if config.adc_sharing:
             # Shared ADCs among crossbars
             self.peripheral_manager = PeripheralManager(
                 num_rows=total_rows,
-                num_cols=config.adcs_per_tile  # Reduced number of ADCs
+                num_cols=config.adcs_per_tile,  # Reduced number of ADCs
+                adc_config=edge_adc_config,
+                dac_config=edge_dac_config,
+                sense_amp_config=edge_sense_amp_config,
+                driver_config=edge_driver_config
             )
         else:
             # Dedicated ADCs per crossbar
             self.peripheral_manager = PeripheralManager(
                 num_rows=total_rows,
-                num_cols=total_cols
+                num_cols=total_cols,
+                adc_config=edge_adc_config,
+                dac_config=edge_dac_config,
+                sense_amp_config=edge_sense_amp_config,
+                driver_config=edge_driver_config
             )
             
         # Statistics

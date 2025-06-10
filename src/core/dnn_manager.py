@@ -33,6 +33,16 @@ class LayerConfig:
     weights_shape: Optional[Tuple[int, ...]] = None
     bias_shape: Optional[Tuple[int, ...]] = None
     
+@dataclass 
+class QuantizationConfig:
+    """Quantization configuration for edge computing"""
+    weight_bits: int = 4  # 4-bit weights for edge inference
+    input_bits: int = 8   # 8-bit input activations
+    accumulation_bits: int = 16  # 16-bit accumulation
+    enable_dynamic_quantization: bool = True
+    quantization_scheme: str = "uniform"  # uniform, non-uniform
+    clipping_strategy: str = "percentile"  # percentile, minmax
+
 @dataclass
 class DNNConfig:
     """Configuration for entire DNN model"""
@@ -42,7 +52,8 @@ class DNNConfig:
     output_shape: Tuple[int, ...]
     total_parameters: int = 0
     total_macs: int = 0  # Multiply-accumulate operations
-    precision: int = 8  # bits
+    precision: int = 8  # bits (legacy - use quantization_config for edge)
+    quantization_config: Optional[QuantizationConfig] = None  # Edge quantization
     
     def __post_init__(self):
         # Calculate total parameters and MACs
@@ -69,6 +80,106 @@ class DNNConfig:
                 if layer.weights_shape:
                     total_macs += np.prod(layer.weights_shape)
         return total_macs
+
+class QuantizationUtils:
+    """Utility functions for quantization operations"""
+    
+    @staticmethod
+    def quantize_weights(weights: np.ndarray, bits: int, scheme: str = "uniform") -> Tuple[np.ndarray, Dict]:
+        """Quantize weights to specified bit precision"""
+        if scheme == "uniform":
+            # Uniform quantization
+            w_min, w_max = weights.min(), weights.max()
+            scale = (w_max - w_min) / (2**bits - 1)
+            zero_point = -round(w_min / scale)
+            
+            # Quantize
+            q_weights = np.round(weights / scale + zero_point)
+            q_weights = np.clip(q_weights, 0, 2**bits - 1)
+            
+            # Dequantize for validation
+            dequant_weights = scale * (q_weights - zero_point)
+            
+            quantization_info = {
+                'scale': scale,
+                'zero_point': zero_point,
+                'min_val': w_min,
+                'max_val': w_max,
+                'quantization_error': np.mean(np.abs(weights - dequant_weights))
+            }
+            
+            return q_weights.astype(np.int8), quantization_info
+        else:
+            raise NotImplementedError(f"Quantization scheme {scheme} not implemented")
+    
+    @staticmethod
+    def quantize_activations(activations: np.ndarray, bits: int, clipping_strategy: str = "percentile") -> Tuple[np.ndarray, Dict]:
+        """Quantize activations with clipping"""
+        if clipping_strategy == "percentile":
+            # Use 99.9th percentile to avoid outliers
+            clip_min = np.percentile(activations, 0.1)
+            clip_max = np.percentile(activations, 99.9)
+        else:  # minmax
+            clip_min, clip_max = activations.min(), activations.max()
+        
+        # Clip activations
+        clipped_activations = np.clip(activations, clip_min, clip_max)
+        
+        # Quantize
+        scale = (clip_max - clip_min) / (2**bits - 1)
+        zero_point = -round(clip_min / scale)
+        
+        q_activations = np.round(clipped_activations / scale + zero_point)
+        q_activations = np.clip(q_activations, 0, 2**bits - 1)
+        
+        quantization_info = {
+            'scale': scale,
+            'zero_point': zero_point,
+            'clip_min': clip_min,
+            'clip_max': clip_max,
+            'clipping_ratio': np.mean((activations < clip_min) | (activations > clip_max))
+        }
+        
+        return q_activations.astype(np.uint8), quantization_info
+    
+    @staticmethod
+    def simulate_quantized_inference(input_data: np.ndarray, weights: np.ndarray, 
+                                   quant_config: QuantizationConfig) -> Tuple[np.ndarray, Dict]:
+        """Simulate quantized matrix-vector multiplication"""
+        # Quantize inputs
+        q_inputs, input_info = QuantizationUtils.quantize_activations(
+            input_data, quant_config.input_bits, quant_config.clipping_strategy)
+        
+        # Quantize weights  
+        q_weights, weight_info = QuantizationUtils.quantize_weights(
+            weights, quant_config.weight_bits, quant_config.quantization_scheme)
+        
+        # Perform quantized computation (simplified)
+        # In reality, this would be done in ReRAM crossbars
+        result = np.dot(q_inputs.astype(np.int32), q_weights.astype(np.int32))
+        
+        # Simulate accumulation with higher precision
+        accumulated_result = result.astype(np.int32)
+        
+        # Convert back to float (this would be done by ADC in real system)
+        input_scale = input_info['scale']
+        weight_scale = weight_info['scale']
+        output_scale = input_scale * weight_scale
+        
+        final_result = accumulated_result * output_scale
+        
+        simulation_info = {
+            'input_quantization': input_info,
+            'weight_quantization': weight_info,
+            'output_scale': output_scale,
+            'bit_precision_used': {
+                'input_bits': quant_config.input_bits,
+                'weight_bits': quant_config.weight_bits,
+                'accumulation_bits': quant_config.accumulation_bits
+            }
+        }
+        
+        return final_result, simulation_info
 
 class HardwareRequirement:
     """Calculate hardware requirements for a DNN"""

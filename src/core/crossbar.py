@@ -11,18 +11,36 @@ class OperationType(Enum):
 
 @dataclass
 class CrossbarConfig:
-    """Configuration for a single ReRAM crossbar"""
+    """Configuration for a single ReRAM crossbar - Edge Computing Optimized"""
     rows: int = 128
     cols: int = 128
-    r_on: float = 1e3  # Low resistance state (Ohms)
-    r_off: float = 1e6  # High resistance state (Ohms)
-    v_read: float = 0.2  # Read voltage (V)
-    v_write: float = 3.0  # Write voltage (V)
-    v_set_threshold: float = 2.0  # SET threshold voltage
-    v_reset_threshold: float = -2.0  # RESET threshold voltage
-    device_variability: float = 0.1  # Device-to-device variability
-    retention_time: float = 1e6  # Data retention time (seconds)
-    endurance: int = 1e6  # Write/erase cycles
+    
+    # ReRAM Device Parameters (based on recent research: Nature Electronics, IEEE JSSC)
+    r_on: float = 1e3     # Low resistance state ~1kΩ (HfOx, TaOx ReRAM)
+    r_off: float = 100e3  # High resistance state ~100kΩ (for higher on/off ratio)
+    on_off_ratio: float = 100  # Typical for HfOx ReRAM
+    
+    # Operating Voltages (optimized for low power edge computing)
+    v_read: float = 0.1       # Read voltage 100mV (low power)
+    v_write: float = 2.0      # Write voltage 2V (reduced for endurance)
+    v_set_threshold: float = 1.5   # SET threshold 1.5V
+    v_reset_threshold: float = -1.2 # RESET threshold -1.2V
+    
+    # Edge Computing Specifications
+    weight_bits: int = 4      # 4-bit weights for edge inference
+    input_bits: int = 8       # 8-bit input quantization
+    accumulation_bits: int = 16  # 16-bit accumulation precision
+    
+    # Device Reliability (edge deployment requirements)
+    device_variability: float = 0.05  # 5% device variation (improved manufacturing)
+    retention_time: float = 10 * 365 * 24 * 3600  # 10 years retention
+    endurance: int = 1e9      # 1 billion cycles (improved for edge)
+    
+    # Timing Parameters (ns scale for edge performance)
+    read_delay_ns: float = 10   # 10ns read access time
+    write_delay_ns: float = 100 # 100ns write time
+    set_delay_ns: float = 50    # 50ns SET operation
+    reset_delay_ns: float = 30  # 30ns RESET operation
     
 class ReRAMCell:
     """Individual ReRAM cell model"""
