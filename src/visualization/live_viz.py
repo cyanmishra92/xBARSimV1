@@ -53,12 +53,38 @@ class LiveVisualization:
     def update_memory_activity(self, buffer_name: str, operations: int, 
                               latency: float, utilization: float):
         """Update memory activity"""
-        self.memory_activity[buffer_name] = {
-            'operations': operations,
-            'latency': latency,
-            'utilization': utilization,
-            'last_update': time.time()
-        }
+        # If this is a new operation, increment our counter
+        if buffer_name not in self.memory_activity:
+            self.memory_activity[buffer_name] = {
+                'operations': 0,
+                'latency': latency,
+                'utilization': utilization,
+                'last_update': time.time()
+            }
+        
+        # Update operations (accumulate if we get more)
+        if operations > self.memory_activity[buffer_name]['operations']:
+            self.memory_activity[buffer_name]['operations'] = operations
+        
+        # Always update other fields
+        self.memory_activity[buffer_name]['latency'] = latency
+        self.memory_activity[buffer_name]['utilization'] = utilization
+        self.memory_activity[buffer_name]['last_update'] = time.time()
+    
+    def increment_memory_operation(self, buffer_name: str):
+        """Increment memory operation count for a buffer"""
+        if buffer_name not in self.memory_activity:
+            self.memory_activity[buffer_name] = {
+                'operations': 0,
+                'latency': 1.0,
+                'utilization': 0.1,
+                'last_update': time.time()
+            }
+        
+        self.memory_activity[buffer_name]['operations'] += 1
+        self.memory_activity[buffer_name]['last_update'] = time.time()
+        self.memory_activity[buffer_name]['utilization'] = min(1.0, 
+                                                               self.memory_activity[buffer_name]['utilization'] + 0.1)
         
     def _monitor_loop(self):
         """Main monitoring loop"""
