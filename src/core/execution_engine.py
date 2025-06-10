@@ -283,20 +283,38 @@ class ExecutionEngine:
             
             # Execute microcontroller program for this layer
             if self.config.enable_cycle_accurate_simulation and layer_program:
+                # Update progress to 25% after loading program
+                if self.live_visualizer:
+                    self.live_visualizer.update_layer_progress(layer_idx, 0.25)
+                
                 # Run microcontroller to execute the instruction program
                 mcu_result = self.system.microcontroller.run_until_completion(max_cycles=5000)
                 mcu_cycles = mcu_result['total_cycles']
                 logging.info(f"Microcontroller executed {mcu_result['instructions_executed']} instructions in {mcu_cycles} cycles")
                 
+                # Update progress to 50% after microcontroller execution
+                if self.live_visualizer:
+                    self.live_visualizer.update_layer_progress(layer_idx, 0.5)
+                
                 # Execute the actual layer computation (hardware simulation)
                 layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
+                
+                # Update progress to 75% after computation
+                if self.live_visualizer:
+                    self.live_visualizer.update_layer_progress(layer_idx, 0.75)
                 
                 # Use microcontroller cycles for timing
                 self.system.timing_model.advance_global_clock(mcu_cycles)
                 self.system.global_cycle = self.system.timing_model.global_cycle
             else:
                 # Direct execution without detailed microcontroller simulation
+                if self.live_visualizer:
+                    self.live_visualizer.update_layer_progress(layer_idx, 0.3)
+                
                 layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data, layer_idx)
+                
+                if self.live_visualizer:
+                    self.live_visualizer.update_layer_progress(layer_idx, 0.8)
                 
                 # Use estimated cycles for timing
                 estimated_cycles = 100 + layer_idx * 50  # Basic estimation
@@ -467,6 +485,9 @@ class ExecutionEngine:
             crossbar = available_crossbars[0]
             
             # Simulate the convolution operation
+            total_operations = out_h * out_w * output_channels
+            completed_operations = 0
+            
             for oh in range(out_h):
                 for ow in range(out_w):
                     for oc in range(output_channels):
@@ -491,6 +512,8 @@ class ExecutionEngine:
                             # Take first output as result
                             output_data[oh, ow, oc] = crossbar_result[0] if len(crossbar_result) > 0 else 0.0
                             
+                            completed_operations += 1
+                            
                             # Update live visualization for crossbar activity
                             if self.live_visualizer:
                                 xb_stats = crossbar.get_statistics()
@@ -499,11 +522,11 @@ class ExecutionEngine:
                                     for t_idx, tile in enumerate(supertile.tiles):
                                         for xb_idx, xbar in enumerate(tile.crossbars):
                                             if xbar == crossbar:
-                                                progress = (oh * out_w + ow + 1) / (out_h * out_w)
+                                                utilization = completed_operations / total_operations
                                                 self.live_visualizer.update_crossbar_activity(
                                                     st_idx, t_idx, xb_idx, 
                                                     xb_stats.get('total_operations', 0),
-                                                    min(1.0, progress)
+                                                    min(1.0, utilization)
                                                 )
                                                 break
                             
