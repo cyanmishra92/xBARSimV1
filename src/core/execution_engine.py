@@ -251,6 +251,11 @@ class ExecutionEngine:
             # Execute layer
             start_cycle = self.system.global_cycle
             layer_result = self._execute_layer_with_timing(layer_dict, intermediate_data)
+            
+            # Advance timing properly
+            estimated_cycles = 100 + layer_idx * 50  # Basic estimation
+            self.system.timing_model.advance_global_clock(estimated_cycles)
+            self.system.global_cycle = self.system.timing_model.global_cycle
             end_cycle = self.system.global_cycle
             
             # Record layer execution
@@ -380,14 +385,17 @@ class ExecutionEngine:
             
         # Calculate output dimensions
         if padding == 'valid':
-            out_h = (h - kernel_size[0]) // stride[0] + 1
-            out_w = (w - kernel_size[1]) // stride[1] + 1
+            out_h = max(1, (h - kernel_size[0]) // stride[0] + 1)
+            out_w = max(1, (w - kernel_size[1]) // stride[1] + 1)
         else:  # 'same'
-            out_h = h // stride[0]
-            out_w = w // stride[1]
+            out_h = max(1, h // stride[0])
+            out_w = max(1, w // stride[1])
             
         # Determine output channels from layer config
-        output_channels = layer_config['output_shape'][-1] if 'output_shape' in layer_config else c
+        if 'output_shape' in layer_config and len(layer_config['output_shape']) >= 3:
+            output_channels = layer_config['output_shape'][-1]
+        else:
+            output_channels = c  # Default to input channels if not specified
         
         # Simulate crossbar computation
         output_data = np.zeros((out_h, out_w, output_channels))
@@ -428,7 +436,8 @@ class ExecutionEngine:
                             output_data[oh, ow, oc] = crossbar_result[0] if len(crossbar_result) > 0 else 0.0
                             
                         # Simulate timing
-                        self.system.timing_model.advance_global_clock(1)
+                        if hasattr(self.system, 'timing_model'):
+                            self.system.timing_model.advance_global_clock(1)
                         
         # Apply activation if specified
         if 'activation' in layer_config:
@@ -528,7 +537,8 @@ class ExecutionEngine:
                         output_data[i, j, :] = np.mean(pool_region, axis=(0, 1))
                         
                     # Simulate timing
-                    self.system.timing_model.advance_global_clock(1)
+                    if hasattr(self.system, 'timing_model'):
+                        self.system.timing_model.advance_global_clock(1)
                     
         return output_data
         

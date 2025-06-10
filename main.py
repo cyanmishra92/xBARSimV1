@@ -89,6 +89,8 @@ def create_sample_dnn_config() -> DNNConfig:
             input_shape=(16, 16, 1),
             output_shape=(14, 14, 8),
             kernel_size=(3, 3),
+            stride=(1, 1),
+            padding="valid",
             activation="relu",
             weights_shape=(3, 3, 1, 8)
         ),
@@ -96,7 +98,8 @@ def create_sample_dnn_config() -> DNNConfig:
             layer_type=LayerType.POOLING,
             input_shape=(14, 14, 8),
             output_shape=(7, 7, 8),
-            kernel_size=(2, 2)
+            kernel_size=(2, 2),
+            stride=(2, 2)
         ),
         LayerConfig(
             layer_type=LayerType.DENSE,
