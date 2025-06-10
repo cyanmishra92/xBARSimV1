@@ -1,0 +1,194 @@
+import numpy as np
+from typing import Dict, List, Tuple, Optional, Union
+from dataclasses import dataclass
+from enum import Enum
+import logging
+
+class OperationType(Enum):
+    READ = "read"
+    WRITE = "write"
+    MVM = "matrix_vector_multiplication"
+
+@dataclass
+class CrossbarConfig:
+    """Configuration for a single ReRAM crossbar"""
+    rows: int = 128
+    cols: int = 128
+    r_on: float = 1e3  # Low resistance state (Ohms)
+    r_off: float = 1e6  # High resistance state (Ohms)
+    v_read: float = 0.2  # Read voltage (V)
+    v_write: float = 3.0  # Write voltage (V)
+    v_set_threshold: float = 2.0  # SET threshold voltage
+    v_reset_threshold: float = -2.0  # RESET threshold voltage
+    device_variability: float = 0.1  # Device-to-device variability
+    retention_time: float = 1e6  # Data retention time (seconds)
+    endurance: int = 1e6  # Write/erase cycles
+    
+class ReRAMCell:
+    """Individual ReRAM cell model"""
+    def __init__(self, config: CrossbarConfig, row: int, col: int):
+        self.config = config
+        self.row = row
+        self.col = col
+        self.resistance = config.r_off  # Initialize to high resistance
+        self.state = 0  # 0 = HRS (High Resistance State), 1 = LRS (Low Resistance State)
+        self.write_count = 0
+        self.last_access_time = 0.0
+        
+        # Add device variability
+        self.r_on_actual = config.r_on * (1 + np.random.normal(0, config.device_variability))
+        self.r_off_actual = config.r_off * (1 + np.random.normal(0, config.device_variability))
+        
+    def write(self, voltage: float, current_time: float = 0.0) -> bool:
+        """Write operation on ReRAM cell"""
+        if self.write_count >= self.config.endurance:
+            return False  # Cell has reached endurance limit
+            
+        if voltage >= self.config.v_set_threshold:
+            # SET operation: switch to LRS
+            self.state = 1
+            self.resistance = self.r_on_actual
+        elif voltage <= self.config.v_reset_threshold:
+            # RESET operation: switch to HRS
+            self.state = 0
+            self.resistance = self.r_off_actual
+            
+        self.write_count += 1
+        self.last_access_time = current_time
+        return True
+        
+    def read(self, voltage: float) -> float:
+        """Read operation - returns current"""
+        # Apply retention degradation if needed
+        current = voltage / self.resistance
+        return current
+        
+    def get_conductance(self) -> float:
+        """Get conductance (1/resistance)"""
+        return 1.0 / self.resistance
+
+class CrossbarArray:
+    """ReRAM Crossbar Array for matrix-vector multiplication"""
+    def __init__(self, config: CrossbarConfig):
+        self.config = config
+        self.rows = config.rows
+        self.cols = config.cols
+        
+        # Initialize ReRAM cells
+        self.cells = [[ReRAMCell(config, i, j) for j in range(self.cols)] 
+                      for i in range(self.rows)]
+        
+        # Peripheral circuits will be added later
+        self.row_drivers = None
+        self.col_sense_amps = None
+        self.adc_units = None
+        self.dac_units = None
+        
+        # Statistics
+        self.total_operations = 0
+        self.total_energy = 0.0
+        self.operation_history = []
+        
+    def program_weights(self, weight_matrix: np.ndarray) -> bool:
+        """Program weight matrix into crossbar"""
+        if weight_matrix.shape != (self.rows, self.cols):
+            raise ValueError(f"Weight matrix shape {weight_matrix.shape} doesn't match crossbar size {(self.rows, self.cols)}")
+            
+        # Normalize weights to conductance values
+        # Map weights to conductance range
+        min_weight, max_weight = weight_matrix.min(), weight_matrix.max()
+        min_conductance = 1.0 / self.config.r_off
+        max_conductance = 1.0 / self.config.r_on
+        
+        success = True
+        for i in range(self.rows):
+            for j in range(self.cols):
+                # Map weight to conductance
+                normalized_weight = (weight_matrix[i, j] - min_weight) / (max_weight - min_weight)
+                target_conductance = min_conductance + normalized_weight * (max_conductance - min_conductance)
+                target_resistance = 1.0 / target_conductance
+                
+                # Program cell
+                if target_resistance < (self.config.r_on + self.config.r_off) / 2:
+                    # SET operation
+                    voltage = self.config.v_set_threshold
+                else:
+                    # RESET operation  
+                    voltage = self.config.v_reset_threshold
+                    
+                if not self.cells[i][j].write(voltage):
+                    success = False
+                    
+        return success
+        
+    def matrix_vector_multiply(self, input_vector: np.ndarray) -> np.ndarray:
+        """Perform analog matrix-vector multiplication"""
+        if len(input_vector) != self.rows:
+            raise ValueError(f"Input vector size {len(input_vector)} doesn't match crossbar rows {self.rows}")
+            
+        # Convert input to voltages (assuming DAC conversion)
+        input_voltages = input_vector * self.config.v_read
+        
+        # Perform analog MVM using Kirchhoff's current law
+        output_currents = np.zeros(self.cols)
+        
+        for j in range(self.cols):
+            column_current = 0.0
+            for i in range(self.rows):
+                # Current through each cell: I = V * G (where G = 1/R)
+                cell_current = input_voltages[i] * self.cells[i][j].get_conductance()
+                column_current += cell_current
+            output_currents[j] = column_current
+            
+        # Update statistics
+        self.total_operations += 1
+        self.operation_history.append({
+            'operation': OperationType.MVM,
+            'input_size': len(input_vector),
+            'output_size': len(output_currents)
+        })
+        
+        return output_currents
+        
+    def get_resistance_matrix(self) -> np.ndarray:
+        """Get current resistance matrix"""
+        resistance_matrix = np.zeros((self.rows, self.cols))
+        for i in range(self.rows):
+            for j in range(self.cols):
+                resistance_matrix[i, j] = self.cells[i][j].resistance
+        return resistance_matrix
+        
+    def get_conductance_matrix(self) -> np.ndarray:
+        """Get current conductance matrix"""
+        conductance_matrix = np.zeros((self.rows, self.cols))
+        for i in range(self.rows):
+            for j in range(self.cols):
+                conductance_matrix[i, j] = self.cells[i][j].get_conductance()
+        return conductance_matrix
+        
+    def get_statistics(self) -> Dict:
+        """Get crossbar statistics"""
+        return {
+            'total_operations': self.total_operations,
+            'total_energy': self.total_energy,
+            'operation_history': self.operation_history,
+            'endurance_status': self._get_endurance_status()
+        }
+        
+    def _get_endurance_status(self) -> Dict:
+        """Check endurance status of all cells"""
+        write_counts = []
+        failed_cells = 0
+        
+        for i in range(self.rows):
+            for j in range(self.cols):
+                write_counts.append(self.cells[i][j].write_count)
+                if self.cells[i][j].write_count >= self.config.endurance:
+                    failed_cells += 1
+                    
+        return {
+            'avg_write_count': np.mean(write_counts),
+            'max_write_count': np.max(write_counts),
+            'failed_cells': failed_cells,
+            'failure_rate': failed_cells / (self.rows * self.cols)
+        }
