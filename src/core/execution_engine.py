@@ -210,6 +210,19 @@ class ExecutionEngine:
                 self.system.buffer_manager.tick_all()
                 self.system.timing_model.advance_global_clock(1)
                 
+                # Update live visualization with memory activity
+                if hasattr(self, 'live_visualizer') and self.live_visualizer:
+                    all_stats = self.system.buffer_manager.get_all_statistics()
+                    buffer_stats = all_stats.get('global_buffer', {})
+                    if buffer_stats:
+                        controller_stats = buffer_stats.get('controller_stats', {})
+                        self.live_visualizer.update_memory_activity(
+                            'global_buffer',
+                            controller_stats.get('total_requests', 0),
+                            controller_stats.get('average_latency', 0),
+                            min(1.0, buffer_stats.get('utilization', 0))
+                        )
+                
             logging.info(f"Input data loaded: shape {input_data.shape}")
             return True
             
@@ -281,6 +294,10 @@ class ExecutionEngine:
             if self.live_visualizer:
                 self.live_visualizer.update_layer_progress(layer_idx, 0.0)
             
+            # Simulate reading input data from appropriate buffer
+            input_buffer = 'global_buffer' if layer_idx == 0 else 'shared_buffers'
+            self._simulate_memory_read(input_buffer, intermediate_data.size, f'layer_{layer_idx}_input')
+            
             # Execute microcontroller program for this layer
             if self.config.enable_cycle_accurate_simulation and layer_program:
                 # Update progress to 25% after loading program
@@ -322,6 +339,11 @@ class ExecutionEngine:
                 self.system.global_cycle = self.system.timing_model.global_cycle
                 
             end_cycle = self.system.global_cycle
+            
+            # Simulate writing output data to appropriate buffer
+            output_buffer = 'shared_buffers' if layer_idx < len(self.dnn_manager.dnn_config.layers) - 1 else 'global_buffer'
+            if layer_result is not None:
+                self._simulate_memory_write(output_buffer, layer_result.size, f'layer_{layer_idx}_output')
             
             # Update live visualization with completion
             if self.live_visualizer:
@@ -470,6 +492,10 @@ class ExecutionEngine:
             output_channels = layer_config['output_shape'][-1]
         else:
             output_channels = c  # Default to input channels if not specified
+            
+        # Simulate loading weights from memory for convolution
+        weight_size = kernel_size[0] * kernel_size[1] * c * output_channels
+        self._simulate_memory_read('global_buffer', weight_size, 'conv_weights')
         
         # Simulate crossbar computation
         output_data = np.zeros((out_h, out_w, output_channels))
@@ -710,3 +736,64 @@ class ExecutionEngine:
             'system_statistics': self._collect_system_statistics(),
             'integration_successful': True
         }
+    
+    def _simulate_memory_read(self, buffer_name: str, data_size: int, requester_id: str):
+        """Simulate memory read operation and update live visualization"""
+        try:
+            # Allocate buffer for read operation
+            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, data_size, requester_id)
+            if buffer_id is not None:
+                # Simulate read request
+                request_id = self.system.buffer_manager.read_data(buffer_name, buffer_id, 0, data_size, requester_id)
+                
+                # Tick buffer manager to process request
+                for _ in range(5):  # Give some cycles for processing
+                    self.system.buffer_manager.tick_all()
+                    
+                # Update live visualization with memory activity
+                if self.live_visualizer:
+                    all_stats = self.system.buffer_manager.get_all_statistics()
+                    buffer_stats = all_stats.get(buffer_name, {})
+                    if buffer_stats:
+                        controller_stats = buffer_stats.get('controller_stats', {})
+                        self.live_visualizer.update_memory_activity(
+                            buffer_name,
+                            controller_stats.get('total_requests', 0),
+                            controller_stats.get('average_latency', 0),
+                            min(1.0, buffer_stats.get('utilization', 0))
+                        )
+                        
+        except Exception as e:
+            logging.debug(f"Memory read simulation failed: {e}")
+    
+    def _simulate_memory_write(self, buffer_name: str, data_size: int, requester_id: str):
+        """Simulate memory write operation and update live visualization"""
+        try:
+            # Allocate buffer for write operation
+            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, data_size, requester_id)
+            if buffer_id is not None:
+                # Create dummy data for write
+                dummy_data = np.zeros(data_size)
+                
+                # Simulate write request
+                request_id = self.system.buffer_manager.write_data(buffer_name, buffer_id, 0, dummy_data, requester_id)
+                
+                # Tick buffer manager to process request
+                for _ in range(5):  # Give some cycles for processing
+                    self.system.buffer_manager.tick_all()
+                    
+                # Update live visualization with memory activity
+                if self.live_visualizer:
+                    all_stats = self.system.buffer_manager.get_all_statistics()
+                    buffer_stats = all_stats.get(buffer_name, {})
+                    if buffer_stats:
+                        controller_stats = buffer_stats.get('controller_stats', {})
+                        self.live_visualizer.update_memory_activity(
+                            buffer_name,
+                            controller_stats.get('total_requests', 0),
+                            controller_stats.get('average_latency', 0),
+                            min(1.0, buffer_stats.get('utilization', 0))
+                        )
+                        
+        except Exception as e:
+            logging.debug(f"Memory write simulation failed: {e}")
