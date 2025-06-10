@@ -61,6 +61,7 @@ class TaskScheduler:
         self.executing_queue = {}  # inst_id -> (instruction, completion_cycle)
         self.completed_instructions = {}  # inst_id -> instruction
         self.dependency_graph = defaultdict(set)  # inst_id -> set of dependent inst_ids
+        self.tie_breaker = 0  # Counter to avoid comparing Instruction objects
         
     def add_instruction(self, instruction: Instruction):
         """Add instruction to scheduler"""
@@ -70,7 +71,9 @@ class TaskScheduler:
             instruction.state = ExecutionState.WAITING
         else:
             # No dependencies - add to ready queue
-            heapq.heappush(self.ready_queue, (-instruction.priority, instruction.inst_id, instruction))
+            # Use tie_breaker to avoid comparing Instruction objects
+            heapq.heappush(self.ready_queue, (-instruction.priority, self.tie_breaker, instruction.inst_id, instruction))
+            self.tie_breaker += 1
             instruction.state = ExecutionState.IDLE
             
         # Update dependency graph
@@ -80,7 +83,7 @@ class TaskScheduler:
     def get_ready_instruction(self) -> Optional[Instruction]:
         """Get next ready instruction from queue"""
         if self.ready_queue:
-            _, _, instruction = heapq.heappop(self.ready_queue)
+            _, _, _, instruction = heapq.heappop(self.ready_queue)
             return instruction
         return None
         
@@ -103,7 +106,8 @@ class TaskScheduler:
                     if not dependent_inst.dependencies:
                         del self.waiting_queue[dependent_id]
                         heapq.heappush(self.ready_queue, 
-                                     (-dependent_inst.priority, dependent_id, dependent_inst))
+                                     (-dependent_inst.priority, self.tie_breaker, dependent_id, dependent_inst))
+                        self.tie_breaker += 1
                         dependent_inst.state = ExecutionState.IDLE
                         
     def mark_instruction_executing(self, instruction: Instruction, completion_cycle: int):

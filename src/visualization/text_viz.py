@@ -230,6 +230,170 @@ def print_energy_breakdown(statistics):
     else:
         print("No energy data available")
 
+def print_detailed_hardware_analysis(chip, statistics):
+    """Print detailed hardware component analysis"""
+    print("\n🔧 DETAILED HARDWARE ANALYSIS")
+    print("═" * 80)
+    
+    # Crossbar Analysis
+    print("🔹 Crossbar Array Analysis:")
+    total_crossbars = 0
+    total_operations = 0
+    
+    for st_idx, supertile in enumerate(chip.supertiles):
+        for t_idx, tile in enumerate(supertile.tiles):
+            for xb_idx, crossbar in enumerate(tile.crossbars):
+                total_crossbars += 1
+                xb_stats = crossbar.get_statistics()
+                ops = xb_stats.get('total_operations', 0)
+                total_operations += ops
+                
+                if ops > 0:  # Only show active crossbars
+                    print(f"   ├── ST{st_idx}_T{t_idx}_XB{xb_idx}: {ops:,} operations")
+    
+    print(f"   └── Total: {total_crossbars} crossbars, {total_operations:,} operations")
+    
+    # Peripheral Circuit Analysis
+    print(f"\n🔹 Peripheral Circuit Analysis:")
+    total_adcs = 0
+    total_dacs = 0
+    total_adc_ops = 0
+    total_dac_ops = 0
+    
+    for st_idx, supertile in enumerate(chip.supertiles):
+        for t_idx, tile in enumerate(supertile.tiles):
+            if hasattr(tile, 'peripheral_manager'):
+                pm = tile.peripheral_manager
+                pm_stats = pm.get_statistics()
+                
+                # ADC statistics
+                adc_stats = pm_stats.get('individual_stats', {}).get('adcs', [])
+                tile_adc_ops = sum(stat.get('conversion_count', 0) for stat in adc_stats)
+                total_adc_ops += tile_adc_ops
+                total_adcs += len(adc_stats)
+                
+                # DAC statistics  
+                dac_stats = pm_stats.get('individual_stats', {}).get('dacs', [])
+                tile_dac_ops = sum(stat.get('conversion_count', 0) for stat in dac_stats)
+                total_dac_ops += tile_dac_ops
+                total_dacs += len(dac_stats)
+                
+                if tile_adc_ops > 0 or tile_dac_ops > 0:
+                    print(f"   ├── ST{st_idx}_T{t_idx}: ADCs: {tile_adc_ops:,} ops, DACs: {tile_dac_ops:,} ops")
+    
+    print(f"   ├── Total ADCs: {total_adcs} units, {total_adc_ops:,} conversions")
+    print(f"   └── Total DACs: {total_dacs} units, {total_dac_ops:,} conversions")
+    
+    # Memory Operation Analysis
+    print(f"\n🔹 Memory Operation Analysis:")
+    if 'memory_statistics' in statistics:
+        memory_stats = statistics['memory_statistics']
+        total_mem_ops = 0
+        total_mem_energy = 0
+        
+        for buffer_name, stats in memory_stats.items():
+            memory_info = stats.get('memory_stats', {})
+            bank_stats = memory_info.get('bank_statistics', [])
+            
+            buffer_ops = sum(bank.get('access_count', 0) for bank in bank_stats)
+            buffer_energy = sum(bank.get('total_energy', 0) for bank in bank_stats)
+            
+            total_mem_ops += buffer_ops
+            total_mem_energy += buffer_energy
+            
+            if buffer_ops > 0:
+                avg_latency = memory_info.get('average_latency', 0)
+                conflict_rate = memory_info.get('conflict_rate', 0) * 100
+                print(f"   ├── {buffer_name.replace('_', ' ').title()}:")
+                print(f"   │   ├── Operations: {buffer_ops:,}")
+                print(f"   │   ├── Energy: {buffer_energy:.2e} J")
+                print(f"   │   ├── Avg Latency: {avg_latency:.1f} cycles")
+                print(f"   │   └── Conflict Rate: {conflict_rate:.1f}%")
+        
+        print(f"   └── Total Memory Ops: {total_mem_ops:,}, Energy: {total_mem_energy:.2e} J")
+
+def print_bottleneck_analysis(statistics, layer_log):
+    """Analyze and print system bottlenecks"""
+    print("\n🚨 BOTTLENECK ANALYSIS")
+    print("═" * 80)
+    
+    # Time breakdown analysis
+    if layer_log:
+        print("🔹 Execution Time Breakdown:")
+        total_cycles = sum(layer['execution_cycles'] for layer in layer_log)
+        
+        # Identify the slowest layer
+        slowest_layer = max(layer_log, key=lambda x: x['execution_cycles'])
+        print(f"   ├── Slowest Layer: Layer {slowest_layer['layer_index']} ({slowest_layer['layer_type']})")
+        print(f"   │   └── {slowest_layer['execution_cycles']:,} cycles ({slowest_layer['execution_cycles']/total_cycles*100:.1f}%)")
+        
+        # Show layer time distribution
+        for layer in sorted(layer_log, key=lambda x: x['execution_cycles'], reverse=True):
+            percentage = (layer['execution_cycles'] / total_cycles * 100) if total_cycles > 0 else 0
+            if percentage > 5:  # Only show layers taking >5% of time
+                print(f"   ├── Layer {layer['layer_index']}: {percentage:.1f}% ({layer['execution_cycles']:,} cycles)")
+    
+    # Memory bottleneck analysis
+    if 'memory_statistics' in statistics:
+        print(f"\n🔹 Memory Bottlenecks:")
+        memory_stats = statistics['memory_statistics']
+        
+        highest_latency = 0
+        highest_conflicts = 0
+        bottleneck_buffer = None
+        conflict_buffer = None
+        
+        for buffer_name, stats in memory_stats.items():
+            memory_info = stats.get('memory_stats', {})
+            avg_latency = memory_info.get('average_latency', 0)
+            conflict_rate = memory_info.get('conflict_rate', 0)
+            
+            if avg_latency > highest_latency:
+                highest_latency = avg_latency
+                bottleneck_buffer = buffer_name
+                
+            if conflict_rate > highest_conflicts:
+                highest_conflicts = conflict_rate
+                conflict_buffer = buffer_name
+        
+        if bottleneck_buffer:
+            print(f"   ├── Highest Latency: {bottleneck_buffer.replace('_', ' ').title()} ({highest_latency:.1f} cycles)")
+            
+        if conflict_buffer and highest_conflicts > 0.01:
+            print(f"   ├── Most Conflicts: {conflict_buffer.replace('_', ' ').title()} ({highest_conflicts*100:.1f}%)")
+            
+        # Utilization analysis
+        low_util_buffers = []
+        for buffer_name, stats in memory_stats.items():
+            utilization = stats.get('utilization', 0)
+            if utilization < 0.1:  # Less than 10% utilization
+                low_util_buffers.append((buffer_name, utilization))
+        
+        if low_util_buffers:
+            print(f"   └── Underutilized Buffers:")
+            for buffer_name, util in low_util_buffers:
+                print(f"       └── {buffer_name.replace('_', ' ').title()}: {util:.1%}")
+    
+    # Resource utilization recommendations
+    print(f"\n🔹 Optimization Recommendations:")
+    
+    # Check crossbar utilization
+    if 'chip_statistics' in statistics:
+        chip_stats = statistics['chip_statistics']
+        if 'performance' in chip_stats:
+            crossbar_ops = chip_stats['performance'].get('total_crossbar_operations', 0)
+            if crossbar_ops == 0:
+                print(f"   ⚠️  No crossbar operations detected - check weight mapping")
+    
+    # Check microcontroller utilization
+    if 'microcontroller_statistics' in statistics:
+        mcu_stats = statistics['microcontroller_statistics']
+        ipc = mcu_stats.get('instructions_per_cycle', 0)
+        if ipc < 0.1:
+            print(f"   ⚠️  Low IPC ({ipc:.3f}) - microcontroller underutilized")
+    
+    print(f"   ✓ Analysis complete - check metrics above for optimization opportunities")
+
 def create_complete_text_report(chip, dnn_manager, execution_result=None):
     """Create a complete text-based report"""
     print("\n" + "═" * 80)
@@ -254,6 +418,13 @@ def create_complete_text_report(chip, dnn_manager, execution_result=None):
         print_performance_summary(execution_result['system_statistics'])
         print_utilization_chart(execution_result['system_statistics'])
         print_energy_breakdown(execution_result['system_statistics'])
+        
+        # Detailed hardware analysis
+        print_detailed_hardware_analysis(chip, execution_result['system_statistics'])
+        
+        # Bottleneck analysis
+        print_bottleneck_analysis(execution_result['system_statistics'], 
+                                 execution_result['layer_execution_log'])
         
         # Inference results
         inference_result = execution_result['inference_result']
