@@ -184,17 +184,26 @@ class CrossbarArray:
                 conductance_matrix[i, j] = self.cells[i][j].get_conductance()
         return conductance_matrix
         
-    def get_statistics(self) -> Dict:
+    def get_statistics(self, detailed_endurance: bool = True) -> Dict:
         """Get crossbar statistics"""
         return {
             'total_operations': self.total_operations,
             'total_energy': self.total_energy,
             'operation_history': self.operation_history,
-            'endurance_status': self._get_endurance_status()
+            'endurance_status': self._get_endurance_status(detailed=detailed_endurance)
         }
         
-    def _get_endurance_status(self) -> Dict:
+    def _get_endurance_status(self, detailed: bool = True) -> Dict:
         """Check endurance status of all cells"""
+        if not detailed:
+            return {
+                "avg_write_count": "N/A",
+                "max_write_count": "N/A",
+                "failed_cells": "N/A",
+                "failure_rate": "N/A",
+                "details_skipped": True
+            }
+
         write_counts = []
         failed_cells = 0
         
@@ -203,10 +212,15 @@ class CrossbarArray:
                 write_counts.append(self.cells[i][j].write_count)
                 if self.cells[i][j].write_count >= self.config.endurance:
                     failed_cells += 1
+
+        avg_wc = np.mean(write_counts) if write_counts else 0
+        max_wc = np.max(write_counts) if write_counts else 0
+        fail_rate = failed_cells / (self.rows * self.cols) if (self.rows * self.cols) > 0 else 0
                     
         return {
-            'avg_write_count': np.mean(write_counts),
-            'max_write_count': np.max(write_counts),
+            'avg_write_count': avg_wc,
+            'max_write_count': max_wc,
             'failed_cells': failed_cells,
-            'failure_rate': failed_cells / (self.rows * self.cols)
+            'failure_rate': fail_rate,
+            "details_skipped": False
         }
