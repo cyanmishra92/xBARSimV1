@@ -265,7 +265,7 @@ def run_simulation(args):
         print("\n6. Generating text-based visualization...")
         try:
             if args.execute and 'result' in locals():
-                create_complete_text_report(chip, dnn_manager, result, detailed_endurance_report=False)
+                create_complete_text_report(chip, dnn_manager, result)
             else:
                 print_architecture_diagram(chip)
             print("   ✓ Text visualization complete!")
