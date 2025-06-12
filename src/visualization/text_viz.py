@@ -387,13 +387,6 @@ def print_bottleneck_analysis(statistics, layer_log):
             print(f"   └── Underutilized Buffers:")
             for buffer_name, util in low_util_buffers:
                 print(f"       └── {buffer_name.replace('_', ' ').title()}: {util:.1%}")
-            # Add new clarification here
-            has_low_util_major_buffer = any(
-                ('global_buffer' in buf_name.lower() or 'shared_buffer' in buf_name.lower()) and u < 0.1
-                for buf_name, u in low_util_buffers
-            )
-            if has_low_util_major_buffer:
-                print(f"       💡 Note: Low utilization in Global/Shared buffers might be expected if the overall workload (e.g., model size, input data) is small compared to the buffer capacities.")
     
     # Resource utilization recommendations
     print(f"\n🔹 Optimization Recommendations:")

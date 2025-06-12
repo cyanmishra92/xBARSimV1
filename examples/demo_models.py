@@ -359,7 +359,7 @@ def main():
                     layer_idx += 1
             dnn_manager.map_dnn_to_hardware(weight_data)
             
-            create_complete_text_report(chip, dnn_manager, result, detailed_endurance_report=False)
+            create_complete_text_report(chip, dnn_manager, result)
             break
     
     print(f"\n🏁 All demos completed!")
