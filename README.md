@@ -163,6 +163,22 @@ result = quick_simulation(execute_inference=True)
 python examples/demo_models.py
 ```
 
+### Example 6: Running Different Models with `main.py`
+
+The `main.py` script can run different predefined neural network models using the `--model` argument.
+The default model is `sample_cnn`. Other available models currently include `tiny_cnn` and `lenet`.
+
+```bash
+# Run the default SampleCNN model (same as without --model)
+python main.py --model sample_cnn --execute --visualize
+
+# Run TinyCNN model
+python main.py --model tiny_cnn --execute --visualize
+
+# Run LeNet model
+python main.py --model lenet --execute --visualize
+```
+
 ## 🎯 New Visualization Features
 
 ### 🔄 Live Visualization
@@ -479,8 +495,14 @@ python examples/simple_test.py
 # Multiple model demos
 python examples/demo_models.py
 
-# Main interface
+# Main interface (runs default SampleCNN)
 python main.py --execute --visualize
+
+# Run TinyCNN with main.py
+python main.py --model tiny_cnn --execute --visualize
+
+# Run LeNet with main.py
+python main.py --model lenet --execute --visualize
 ```
 
 ### Model Examples
