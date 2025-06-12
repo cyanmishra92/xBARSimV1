@@ -433,6 +433,10 @@ Examples:
   
   # Generate comprehensive analysis with architecture exploration
   python main.py --execute --visualize --explore-arch
+
+  # Run with a specific model (e.g., tiny_cnn, lenet)
+  python main.py --model tiny_cnn --execute --visualize
+  python main.py --model lenet --execute
         """
     )
     
