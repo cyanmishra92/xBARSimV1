@@ -118,6 +118,116 @@ def create_sample_dnn_config() -> DNNConfig:
         precision=8
     )
 
+def create_tiny_cnn_config() -> DNNConfig:
+    """Create a tiny CNN for quick testing (from demo_models.py)"""
+    layers = [
+        LayerConfig(
+            layer_type=LayerType.CONV2D,
+            input_shape=(8, 8, 1),
+            output_shape=(6, 6, 4),
+            kernel_size=(3, 3),
+            activation="relu",
+            weights_shape=(3, 3, 1, 4)
+        ),
+        LayerConfig(
+            layer_type=LayerType.POOLING,
+            input_shape=(6, 6, 4),
+            output_shape=(3, 3, 4),
+            kernel_size=(2, 2)
+        ),
+        LayerConfig(
+            layer_type=LayerType.DENSE,
+            input_shape=(36,),
+            output_shape=(3,),
+            activation="softmax",
+            weights_shape=(36, 3)
+        )
+    ]
+
+    return DNNConfig(
+        model_name="TinyCNN",
+        layers=layers,
+        input_shape=(8, 8, 1),
+        output_shape=(3,),
+        precision=8
+    )
+
+def create_lenet_config() -> DNNConfig:
+    """Create a LeNet-5 style DNN configuration"""
+    layers = [
+        # C1: Conv (kernel 5x5, 6 filters, stride 1, padding valid), output (24, 24, 6), activation 'relu'
+        LayerConfig(
+            layer_type=LayerType.CONV2D,
+            input_shape=(28, 28, 1),
+            output_shape=(24, 24, 6),
+            kernel_size=(5, 5),
+            stride=(1, 1),
+            padding="valid",
+            activation="relu",
+            weights_shape=(5, 5, 1, 6)
+        ),
+        # S2: Pool (kernel 2x2, stride 2), output (12, 12, 6)
+        LayerConfig(
+            layer_type=LayerType.POOLING,
+            input_shape=(24, 24, 6),
+            output_shape=(12, 12, 6),
+            kernel_size=(2, 2),
+            stride=(2, 2)
+        ),
+        # C3: Conv (kernel 5x5, 16 filters, stride 1, padding valid), output (8, 8, 16), activation 'relu'
+        LayerConfig(
+            layer_type=LayerType.CONV2D,
+            input_shape=(12, 12, 6),
+            output_shape=(8, 8, 16),
+            kernel_size=(5, 5),
+            stride=(1, 1),
+            padding="valid",
+            activation="relu",
+            weights_shape=(5, 5, 6, 16)
+        ),
+        # S4: Pool (kernel 2x2, stride 2), output (4, 4, 16)
+        LayerConfig(
+            layer_type=LayerType.POOLING,
+            input_shape=(8, 8, 16),
+            output_shape=(4, 4, 16),
+            kernel_size=(2, 2),
+            stride=(2, 2)
+        ),
+        # Flatten step is implicit in Dense layer input_shape
+        # F5: Dense (input 4*4*16=256, output 120), activation 'relu'
+        LayerConfig(
+            layer_type=LayerType.DENSE,
+            input_shape=(256,), # 4 * 4 * 16
+            output_shape=(120,),
+            activation="relu",
+            weights_shape=(256, 120)
+        ),
+        # F6: Dense (input 120, output 84), activation 'relu'
+        LayerConfig(
+            layer_type=LayerType.DENSE,
+            input_shape=(120,),
+            output_shape=(84,),
+            activation="relu",
+            weights_shape=(120, 84)
+        ),
+        # Output: Dense (input 84, output 10), activation 'softmax'
+        LayerConfig(
+            layer_type=LayerType.DENSE,
+            input_shape=(84,),
+            output_shape=(10,),
+            activation="softmax",
+            weights_shape=(84, 10)
+        )
+    ]
+
+    return DNNConfig(
+        model_name="LeNet5",
+        layers=layers,
+        input_shape=(28, 28, 1),
+        output_shape=(10,),
+        precision=8 # Assuming 8-bit precision similar to other models
+    )
+
 def run_simulation(args):
     """Run the main simulation"""
     import numpy as np  # Import numpy in function scope
@@ -143,7 +253,16 @@ def run_simulation(args):
     
     # 3. Create DNN configuration
     print("\n2. Creating DNN configuration...")
-    dnn_config = create_sample_dnn_config()
+    if args.model == 'sample_cnn':
+        dnn_config = create_sample_dnn_config()
+    elif args.model == 'tiny_cnn':
+        dnn_config = create_tiny_cnn_config()
+    elif args.model == 'lenet':
+        dnn_config = create_lenet_config()
+    else: # Should not happen due to choices in argparse
+        logging.error(f"Unknown model: {args.model}")
+        return False
+    print(f"\nSelected DNN Model: {args.model.upper()}")
     dnn_manager = DNNManager(dnn_config, chip)
     
     if args.verbose:
@@ -342,6 +461,13 @@ Examples:
                        help='Enable live visualization during execution')
     parser.add_argument('--explore-arch', action='store_true',
                        help='Launch interactive architecture explorer')
+    parser.add_argument(
+        '--model',
+        type=str,
+        default='sample_cnn',
+        choices=['sample_cnn', 'tiny_cnn', 'lenet'],
+        help='Selects the DNN model to run (default: sample_cnn)'
+    )
     
     args = parser.parse_args()
     

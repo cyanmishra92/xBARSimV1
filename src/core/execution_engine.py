@@ -800,13 +800,39 @@ class ExecutionEngine:
                 return
                 
             # Allocate buffer for read operation
-            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, data_size, requester_id)
-            logging.debug(f"Memory read: allocated buffer {buffer_id} for {data_size} bytes in {buffer_name}")
+            # Calculate num_words from data_size (in bytes)
+            if buffer_name not in self.system.buffer_manager.buffers:
+                logging.error(f"Buffer {buffer_name} not found in BufferManager during _simulate_memory_read for allocation.")
+                return
+
+            word_size_bits = self.system.buffer_manager.buffers[buffer_name]['config'].word_size_bits
+            if word_size_bits == 0:
+                logging.error(f"Word size is 0 for buffer {buffer_name}.")
+                return
+
+            word_size_bytes = word_size_bits // 8
+            if word_size_bytes == 0:
+                logging.error(f"Word size in bytes is 0 for buffer {buffer_name} (word_size_bits: {word_size_bits}). Cannot calculate num_words.")
+                num_words_for_alloc = 1 # Default to 1 word if calculation fails
+            else:
+                num_words_for_alloc = (data_size + word_size_bytes - 1) // word_size_bytes
+
+            if data_size > 0 and num_words_for_alloc == 0:
+                num_words_for_alloc = 1
+            elif data_size == 0:
+                num_words_for_alloc = 0
+
+            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, num_words_for_alloc, requester_id)
+            logging.debug(f"Memory read: allocated buffer {buffer_id} for {data_size} bytes ({num_words_for_alloc} words) in {buffer_name}")
             
             if buffer_id is not None:
-                # Simulate read request
-                request_id = self.system.buffer_manager.read_data(buffer_name, buffer_id, 0, data_size, requester_id)
-                logging.debug(f"Memory read: created request {request_id}")
+                # Calculate num_words_to_read for the read_data call (should be same as num_words_for_alloc if allocation is for the exact read amount)
+                # The prompt's logic for num_words_to_read is identical to num_words_for_alloc calculation.
+                num_words_to_read = num_words_for_alloc
+
+                # Modified call:
+                request_id = self.system.buffer_manager.read_data(buffer_name, buffer_id, 0, num_words_to_read, requester_id=requester_id)
+                logging.debug(f"Memory read: created request {request_id} for {num_words_to_read} words.")
                 
                 # Tick buffer manager to process request
                 for cycle in range(10):  # Give more cycles for processing
