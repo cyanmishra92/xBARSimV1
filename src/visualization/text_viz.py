@@ -134,7 +134,12 @@ def print_performance_summary(statistics):
         print(f"\n🔹 Microcontroller Performance:")
         print(f"   ├── Instructions: {mcu_stats.get('total_instructions_executed', 'N/A'):,}")
         print(f"   ├── Total Cycles: {mcu_stats.get('total_cycles', 'N/A'):,}")
-        print(f"   ├── IPC: {mcu_stats.get('instructions_per_cycle', 0):.3f}")
+        ipc = mcu_stats.get('instructions_per_cycle', 0)
+        total_mcu_instructions = mcu_stats.get('total_instructions_executed', 0)
+        if total_mcu_instructions == 0 and ipc == 0:
+            print(f"   ├── IPC: N/A (detailed MCU sim inactive or no instructions executed)")
+        else:
+            print(f"   ├── IPC: {ipc:.3f}")
         print(f"   └── Energy: {mcu_stats.get('energy_consumption', 0):.2e} J")
 
 def print_layer_execution_log(layer_log):
@@ -230,7 +235,7 @@ def print_energy_breakdown(statistics):
     else:
         print("No energy data available")
 
-def print_detailed_hardware_analysis(chip, statistics):
+def print_detailed_hardware_analysis(chip, statistics, detailed_endurance: bool = True):
     """Print detailed hardware component analysis"""
     print("\n🔧 DETAILED HARDWARE ANALYSIS")
     print("═" * 80)
@@ -244,12 +249,21 @@ def print_detailed_hardware_analysis(chip, statistics):
         for t_idx, tile in enumerate(supertile.tiles):
             for xb_idx, crossbar in enumerate(tile.crossbars):
                 total_crossbars += 1
-                xb_stats = crossbar.get_statistics()
+                xb_stats = crossbar.get_statistics(detailed_endurance=detailed_endurance) # Pass flag
                 ops = xb_stats.get('total_operations', 0)
                 total_operations += ops
                 
+                endurance_info = xb_stats.get('endurance_status', {})
                 if ops > 0:  # Only show active crossbars
-                    print(f"   ├── ST{st_idx}_T{t_idx}_XB{xb_idx}: {ops:,} operations")
+                    if endurance_info.get('details_skipped', False):
+                        print(f"   ├── ST{st_idx}_T{t_idx}_XB{xb_idx}: {ops:,} operations (Endurance: N/A)")
+                    else:
+                        # Format endurance details if available and not skipped
+                        avg_wc = endurance_info.get('avg_write_count', 'N/A')
+                        max_wc = endurance_info.get('max_write_count', 'N/A')
+                        failed_c = endurance_info.get('failed_cells', 'N/A')
+                        avg_wc_str = f"{avg_wc:.1f}" if isinstance(avg_wc, float) else avg_wc
+                        print(f"   ├── ST{st_idx}_T{t_idx}_XB{xb_idx}: {ops:,} operations (Endurance: Avg Writes {avg_wc_str}, Max Writes {max_wc}, Failed {failed_c})")
     
     print(f"   └── Total: {total_crossbars} crossbars, {total_operations:,} operations")
     
@@ -373,6 +387,13 @@ def print_bottleneck_analysis(statistics, layer_log):
             print(f"   └── Underutilized Buffers:")
             for buffer_name, util in low_util_buffers:
                 print(f"       └── {buffer_name.replace('_', ' ').title()}: {util:.1%}")
+            # Add new clarification here
+            has_low_util_major_buffer = any(
+                ('global_buffer' in buf_name.lower() or 'shared_buffer' in buf_name.lower()) and u < 0.1
+                for buf_name, u in low_util_buffers
+            )
+            if has_low_util_major_buffer:
+                print(f"       💡 Note: Low utilization in Global/Shared buffers might be expected if the overall workload (e.g., model size, input data) is small compared to the buffer capacities.")
     
     # Resource utilization recommendations
     print(f"\n🔹 Optimization Recommendations:")
@@ -394,7 +415,7 @@ def print_bottleneck_analysis(statistics, layer_log):
     
     print(f"   ✓ Analysis complete - check metrics above for optimization opportunities")
 
-def create_complete_text_report(chip, dnn_manager, execution_result=None):
+def create_complete_text_report(chip, dnn_manager, execution_result=None, detailed_endurance_report: bool = False):
     """Create a complete text-based report"""
     print("\n" + "═" * 80)
     print("🎯 RERAM CROSSBAR SIMULATOR - COMPLETE REPORT")
@@ -420,7 +441,7 @@ def create_complete_text_report(chip, dnn_manager, execution_result=None):
         print_energy_breakdown(execution_result['system_statistics'])
         
         # Detailed hardware analysis
-        print_detailed_hardware_analysis(chip, execution_result['system_statistics'])
+        print_detailed_hardware_analysis(chip, execution_result['system_statistics'], detailed_endurance=detailed_endurance_report)
         
         # Bottleneck analysis
         print_bottleneck_analysis(execution_result['system_statistics'], 
