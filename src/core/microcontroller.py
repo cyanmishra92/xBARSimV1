@@ -535,10 +535,17 @@ class Microcontroller:
         source_buffer = instruction.operands['source_buffer']
         input_shape = instruction.operands['input_shape']
         
-        # Simulate reading from input buffer
+        # Simulate reading from input buffer using BufferManager
         if self.buffer_manager:
-            # This would trigger actual buffer reads
-            pass
+            num_words = int(np.prod(input_shape))
+            region_id = self.buffer_manager.allocate_buffer(source_buffer, num_words, "mcu_load")
+            if region_id is not None:
+                req_id = self.buffer_manager.read_data(source_buffer, region_id, 0, num_words, "mcu_load")
+                while req_id is not None and not self.buffer_manager.controllers[source_buffer].is_request_complete(req_id):
+                    self.buffer_manager.tick_all()
+                self.buffer_manager.deallocate_buffer(source_buffer, region_id)
+                cfg = self.buffer_manager.controllers[source_buffer].config
+                self.energy_consumption += num_words * cfg.word_size_bits * cfg.read_energy_per_bit
             
         logging.info(f"Loading input of shape {input_shape} from buffer {source_buffer}")
         
@@ -561,10 +568,13 @@ class Microcontroller:
         bit_precision = instruction.operands['bit_precision']
         
         if self.compute_manager and self.compute_manager.shift_add_units:
-            # Use actual shift-add unit
             shift_add_unit = self.compute_manager.shift_add_units[0]
-            # This would trigger actual computation
-            pass
+            partial_sums = [1.0] * bit_precision
+            bit_positions = list(range(bit_precision))
+            energy_before = shift_add_unit.total_energy
+            shift_add_unit.shift_and_add(partial_sums, bit_positions)
+            energy_after = shift_add_unit.total_energy
+            self.energy_consumption += energy_after - energy_before
             
         logging.info(f"Executing shift-add for {bit_precision}-bit precision")
         
@@ -573,10 +583,14 @@ class Microcontroller:
         activation_type = instruction.operands['activation_type']
         
         if self.compute_manager and self.compute_manager.activation_units:
-            # Use actual activation unit
             activation_unit = self.compute_manager.activation_units[0]
-            # This would trigger actual computation
-            pass
+            data = np.zeros((1,), dtype=float)
+            energy_before = activation_unit.total_energy
+            # Convert string to ActivationType enum if needed
+            act_enum = activation_type if isinstance(activation_type, ActivationType) else ActivationType(activation_type)
+            activation_unit.apply_activation(data, act_enum)
+            energy_after = activation_unit.total_energy
+            self.energy_consumption += energy_after - energy_before
             
         logging.info(f"Executing {activation_type} activation")
         
@@ -586,10 +600,13 @@ class Microcontroller:
         kernel_size = instruction.operands['kernel_size']
         
         if self.compute_manager and self.compute_manager.pooling_units:
-            # Use actual pooling unit
             pooling_unit = self.compute_manager.pooling_units[0]
-            # This would trigger actual computation
-            pass
+            dummy = np.zeros((kernel_size[0]*2, kernel_size[1]*2, 1), dtype=float)
+            energy_before = pooling_unit.total_energy
+            pool_enum = pooling_type if isinstance(pooling_type, PoolingType) else PoolingType(pooling_type)
+            pooling_unit.apply_pooling(dummy, pool_enum, kernel_size, kernel_size)
+            energy_after = pooling_unit.total_energy
+            self.energy_consumption += energy_after - energy_before
             
         logging.info(f"Executing {pooling_type} pooling with kernel {kernel_size}")
         
@@ -599,8 +616,16 @@ class Microcontroller:
         output_shape = instruction.operands['output_shape']
         
         if self.buffer_manager:
-            # This would trigger actual buffer writes
-            pass
+            num_words = int(np.prod(output_shape))
+            region_id = self.buffer_manager.allocate_buffer(target_buffer, num_words, "mcu_store")
+            if region_id is not None:
+                dummy = np.zeros(num_words)
+                req_id = self.buffer_manager.write_data(target_buffer, region_id, 0, dummy, "mcu_store")
+                while req_id is not None and not self.buffer_manager.controllers[target_buffer].is_request_complete(req_id):
+                    self.buffer_manager.tick_all()
+                self.buffer_manager.deallocate_buffer(target_buffer, region_id)
+                cfg = self.buffer_manager.controllers[target_buffer].config
+                self.energy_consumption += num_words * cfg.word_size_bits * cfg.write_energy_per_bit
             
         logging.info(f"Storing output of shape {output_shape} to buffer {target_buffer}")
         
