@@ -334,7 +334,10 @@ class BufferManager:
             return None
             
         address = start_addr + offset
-        data_size_bits = buffer['config'].word_size_bits  # Assuming one word
+        num_words = 1
+        if isinstance(data, (list, tuple, np.ndarray)):
+            num_words = len(data)
+        data_size_bits = num_words * buffer['config'].word_size_bits
         
         return self.controllers[buffer_name].schedule_request(
             address, data_size_bits, AccessType.WRITE, data, 
