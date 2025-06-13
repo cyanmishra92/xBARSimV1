@@ -896,7 +896,7 @@ class ExecutionEngine:
 
             if buffer_id is not None:
                 # Create dummy data for write
-                dummy_data = np.zeros(num_words_for_alloc)
+                dummy_data = np.zeros(num_words_for_alloc, dtype=np.float32)
 
                 # Simulate write request
                 request_id = self.system.buffer_manager.write_data(buffer_name, buffer_id, 0, dummy_data, requester_id)

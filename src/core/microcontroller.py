@@ -619,7 +619,7 @@ class Microcontroller:
             num_words = int(np.prod(output_shape))
             region_id = self.buffer_manager.allocate_buffer(target_buffer, num_words, "mcu_store")
             if region_id is not None:
-                dummy = np.zeros(num_words)
+                dummy = np.zeros(num_words, dtype=np.float32)
                 req_id = self.buffer_manager.write_data(target_buffer, region_id, 0, dummy, "mcu_store")
                 while req_id is not None and not self.buffer_manager.controllers[target_buffer].is_request_complete(req_id):
                     self.buffer_manager.tick_all()
