@@ -335,8 +335,10 @@ class BufferManager:
             
         address = start_addr + offset
         num_words = 1
-        if isinstance(data, (list, tuple, np.ndarray)):
+        try:
             num_words = len(data)
+        except TypeError:
+            pass
         data_size_bits = num_words * buffer['config'].word_size_bits
         
         return self.controllers[buffer_name].schedule_request(
