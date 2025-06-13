@@ -12,6 +12,50 @@ from core.crossbar import CrossbarConfig
 from core.peripherals import ADCConfig, DACConfig, ADCType, DACType
 from visualization.text_viz import print_architecture_diagram
 
+def create_mobile_edge_config():
+    """Configuration for extremely small mobile/IoT devices"""
+    print("📱 Mobile Edge Configuration (Tiny Device)")
+    print("="*60)
+
+    crossbar_config = CrossbarConfig(
+        rows=16,
+        cols=16,
+        r_on=2e3,
+        r_off=4e5,
+        device_variability=0.1,
+        endurance=5e4,
+    )
+
+    tile_config = TileConfig(
+        crossbars_per_tile=1,
+        crossbar_config=crossbar_config,
+        local_buffer_size=8,
+        adc_sharing=True,
+        adcs_per_tile=4,
+    )
+
+    supertile_config = SuperTileConfig(
+        tiles_per_supertile=1,
+        tile_config=tile_config,
+        shared_buffer_size=32,
+    )
+
+    chip_config = ChipConfig(
+        supertiles_per_chip=1,
+        supertile_config=supertile_config,
+        global_buffer_size=128,
+    )
+
+    chip = ReRAMChip(chip_config)
+    config = chip.get_chip_configuration()
+
+    print(f"✓ Total Crossbars: {config['compute_capacity']['total_crossbars']}")
+    print(f"✓ Weight Capacity: {config['compute_capacity']['total_weight_capacity']:,}")
+    print(f"✓ Power Profile: Ultra compact for always-on sensing")
+    print(f"✓ Use Case: Wearables, IoT sensors")
+
+    return chip
+
 def create_edge_device_config():
     """Ultra-low power edge device configuration"""
     print("🔋 Edge Device Configuration (Ultra-Low Power)")
@@ -239,6 +283,7 @@ def compare_configurations():
     print("="*80)
     
     configs = [
+        ("Mobile Edge", create_mobile_edge_config),
         ("Edge Device", create_edge_device_config),
         ("Server", create_server_config),
         ("Automotive", create_automotive_config),
@@ -257,7 +302,9 @@ def compare_configurations():
         capacity = f"{config['compute_capacity']['total_weight_capacity']//1000}K"
         memory = config['memory_hierarchy']['global_buffer'].split()[0] + "KB"
         
-        if name == "Edge Device":
+        if name == "Mobile Edge":
+            use_case = "Wearables"
+        elif name == "Edge Device":
             use_case = "IoT, Mobile"
         elif name == "Server":
             use_case = "Datacenter, Training"
