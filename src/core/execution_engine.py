@@ -513,11 +513,12 @@ class ExecutionEngine:
         available_crossbars = []
         for supertile in self.chip.supertiles:
             for tile in supertile.tiles:
-                available_crossbars.extend(tile.crossbars)
-                
+                for cb in tile.crossbars:
+                    available_crossbars.append((tile, cb))
+
         if available_crossbars:
             # Use first available crossbar for demonstration
-            crossbar = available_crossbars[0]
+            tile_ref, crossbar = available_crossbars[0]
             
             # Simulate the convolution operation
             total_operations = out_h * out_w * output_channels
@@ -541,20 +542,11 @@ class ExecutionEngine:
                             elif len(patch) > crossbar.rows:
                                 patch = patch[:crossbar.rows]
                                 
-                            # Perform matrix-vector multiplication
-                            crossbar_result = crossbar.matrix_vector_multiply(patch)
-                            
-                            # Simulate ADC/DAC operations for each crossbar computation
-                            # Each crossbar operation requires DAC for input and ADC for output
-                            if hasattr(crossbar, 'dac_conversions'):
-                                crossbar.dac_conversions = getattr(crossbar, 'dac_conversions', 0) + len(patch)
-                            else:
-                                crossbar.dac_conversions = len(patch)
-                                
-                            if hasattr(crossbar, 'adc_conversions'):
-                                crossbar.adc_conversions = getattr(crossbar, 'adc_conversions', 0) + len(crossbar_result)
-                            else:
-                                crossbar.adc_conversions = len(crossbar_result)
+                            # Perform matrix-vector multiplication using the tile's peripherals
+                            crossbar_result = crossbar.matrix_vector_multiply(
+                                patch,
+                                peripheral_manager=tile_ref.peripheral_manager,
+                            )
                             
                             # Take first output as result
                             output_data[oh, ow, oc] = crossbar_result[0] if len(crossbar_result) > 0 else 0.0
@@ -606,10 +598,11 @@ class ExecutionEngine:
         available_crossbars = []
         for supertile in self.chip.supertiles:
             for tile in supertile.tiles:
-                available_crossbars.extend(tile.crossbars)
-                
+                for cb in tile.crossbars:
+                    available_crossbars.append((tile, cb))
+
         if available_crossbars:
-            crossbar = available_crossbars[0]
+            tile_ref, crossbar = available_crossbars[0]
             
             # Pad input to match crossbar size
             if len(input_flat) < crossbar.rows:
@@ -617,8 +610,11 @@ class ExecutionEngine:
             else:
                 input_padded = input_flat[:crossbar.rows]
                 
-            # Perform computation
-            result = crossbar.matrix_vector_multiply(input_padded)
+            # Perform computation using the tile's peripherals
+            result = crossbar.matrix_vector_multiply(
+                input_padded,
+                peripheral_manager=tile_ref.peripheral_manager,
+            )
             
             # Take required outputs
             output_data = result[:output_size] if len(result) >= output_size else np.pad(result, (0, output_size - len(result)))
@@ -737,25 +733,23 @@ class ExecutionEngine:
             
     def _collect_system_statistics(self) -> Dict[str, Any]:
         """Collect comprehensive system statistics"""
-        # Debug: Check crossbar operations and ADC/DAC conversions directly
+        # Collect crossbar and peripheral statistics
         total_crossbar_ops_debug = 0
         total_adc_conversions = 0
         total_dac_conversions = 0
-        
+
         for supertile in self.chip.supertiles:
             for tile in supertile.tiles:
+                # Aggregate crossbar operations
                 for crossbar in tile.crossbars:
                     crossbar_ops = crossbar.get_statistics()['total_operations']
                     total_crossbar_ops_debug += crossbar_ops
-                    
-                    # Count ADC/DAC conversions we added
-                    adc_conv = getattr(crossbar, 'adc_conversions', 0)
-                    dac_conv = getattr(crossbar, 'dac_conversions', 0)
-                    total_adc_conversions += adc_conv
-                    total_dac_conversions += dac_conv
-                    
-                    if crossbar_ops > 0:
-                        logging.info(f"Debug: Crossbar ops={crossbar_ops}, ADC={adc_conv}, DAC={dac_conv}")
+
+                # Aggregate peripheral conversion counts
+                if hasattr(tile, 'peripheral_manager'):
+                    pm = tile.peripheral_manager
+                    total_adc_conversions += sum(adc.conversion_count for adc in pm.output_adcs)
+                    total_dac_conversions += sum(dac.conversion_count for dac in pm.input_dacs)
         
         logging.info(f"Debug: Total - Crossbar ops: {total_crossbar_ops_debug}, ADC: {total_adc_conversions}, DAC: {total_dac_conversions}")
         

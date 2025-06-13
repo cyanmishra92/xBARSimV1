@@ -145,34 +145,55 @@ class CrossbarArray:
                     
         return success
         
-    def matrix_vector_multiply(self, input_vector: np.ndarray) -> np.ndarray:
-        """Perform analog matrix-vector multiplication"""
+    def matrix_vector_multiply(self, input_vector: np.ndarray,
+                               peripheral_manager: Optional['PeripheralManager'] = None) -> np.ndarray:
+        """Perform matrix-vector multiplication using optional peripheral circuits."""
         if len(input_vector) != self.rows:
-            raise ValueError(f"Input vector size {len(input_vector)} doesn't match crossbar rows {self.rows}")
-            
-        # Convert input to voltages (assuming DAC conversion)
-        input_voltages = input_vector * self.config.v_read
-        
+            raise ValueError(
+                f"Input vector size {len(input_vector)} doesn't match crossbar rows {self.rows}")
+
+        # Convert input using DACs if a PeripheralManager is provided
+        if peripheral_manager is not None:
+            if len(peripheral_manager.input_dacs) < self.rows:
+                raise ValueError("PeripheralManager lacks sufficient DAC units")
+            input_voltages = np.zeros(self.rows)
+            for i in range(self.rows):
+                digital_code = int(input_vector[i])
+                input_voltages[i] = peripheral_manager.input_dacs[i].convert(digital_code)
+        else:
+            input_voltages = input_vector * self.config.v_read
+
         # Perform analog MVM using Kirchhoff's current law
         output_currents = np.zeros(self.cols)
-        
+
         for j in range(self.cols):
             column_current = 0.0
             for i in range(self.rows):
-                # Current through each cell: I = V * G (where G = 1/R)
                 cell_current = input_voltages[i] * self.cells[i][j].get_conductance()
                 column_current += cell_current
             output_currents[j] = column_current
-            
+
+        # Convert outputs using sense amplifiers and ADCs if available
+        if peripheral_manager is not None:
+            if len(peripheral_manager.output_adcs) < self.cols:
+                raise ValueError("PeripheralManager lacks sufficient ADC units")
+            output_digital = np.zeros(self.cols, dtype=int)
+            for j in range(self.cols):
+                voltage = peripheral_manager.col_sense_amps[j].amplify(output_currents[j])
+                output_digital[j] = peripheral_manager.output_adcs[j].convert(voltage)
+            final_output = output_digital
+        else:
+            final_output = output_currents
+
         # Update statistics
         self.total_operations += 1
         self.operation_history.append({
             'operation': OperationType.MVM,
             'input_size': len(input_vector),
-            'output_size': len(output_currents)
+            'output_size': len(final_output)
         })
-        
-        return output_currents
+
+        return final_output
         
     def get_resistance_matrix(self) -> np.ndarray:
         """Get current resistance matrix"""

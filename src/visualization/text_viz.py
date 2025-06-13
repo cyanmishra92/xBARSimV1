@@ -142,6 +142,20 @@ def print_performance_summary(statistics):
             print(f"   ├── IPC: {ipc:.3f}")
         print(f"   └── Energy: {mcu_stats.get('energy_consumption', 0):.2e} J")
 
+def print_system_report(statistics):
+    """Print a concise system statistics report including peripheral usage."""
+    print("\n📑 SYSTEM REPORT")
+    print("─" * 60)
+    print_performance_summary(statistics)
+
+    peripheral_stats = statistics.get('peripheral_statistics', {})
+    adc_conv = peripheral_stats.get('adc_conversions', 0)
+    dac_conv = peripheral_stats.get('dac_conversions', 0)
+    if adc_conv or dac_conv:
+        print(f"\n🔹 Peripheral Activity:")
+        print(f"   ├── DAC Conversions: {dac_conv:,}")
+        print(f"   └── ADC Conversions: {adc_conv:,}")
+
 def print_layer_execution_log(layer_log):
     """Print layer execution timeline"""
     print("\n⏱️  LAYER EXECUTION TIMELINE")
