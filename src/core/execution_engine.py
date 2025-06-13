@@ -870,13 +870,34 @@ class ExecutionEngine:
                 return
                 
             # Allocate buffer for write operation
-            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, data_size, requester_id)
-            logging.debug(f"Memory write: allocated buffer {buffer_id} for {data_size} bytes in {buffer_name}")
-            
+            if buffer_name not in self.system.buffer_manager.buffers:
+                logging.error(f"Buffer {buffer_name} not found in BufferManager during _simulate_memory_write for allocation.")
+                return
+
+            word_size_bits = self.system.buffer_manager.buffers[buffer_name]['config'].word_size_bits
+            if word_size_bits == 0:
+                logging.error(f"Word size is 0 for buffer {buffer_name}.")
+                return
+
+            word_size_bytes = word_size_bits // 8
+            if word_size_bytes == 0:
+                logging.error(f"Word size in bytes is 0 for buffer {buffer_name} (word_size_bits: {word_size_bits}). Cannot calculate num_words.")
+                num_words_for_alloc = 1
+            else:
+                num_words_for_alloc = (data_size + word_size_bytes - 1) // word_size_bytes
+
+            if data_size > 0 and num_words_for_alloc == 0:
+                num_words_for_alloc = 1
+            elif data_size == 0:
+                num_words_for_alloc = 0
+
+            buffer_id = self.system.buffer_manager.allocate_buffer(buffer_name, num_words_for_alloc, requester_id)
+            logging.debug(f"Memory write: allocated buffer {buffer_id} for {data_size} bytes ({num_words_for_alloc} words) in {buffer_name}")
+
             if buffer_id is not None:
                 # Create dummy data for write
-                dummy_data = np.zeros(data_size)
-                
+                dummy_data = np.zeros(num_words_for_alloc)
+
                 # Simulate write request
                 request_id = self.system.buffer_manager.write_data(buffer_name, buffer_id, 0, dummy_data, requester_id)
                 logging.debug(f"Memory write: created request {request_id}")
