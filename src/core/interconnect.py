@@ -54,11 +54,13 @@ class InterconnectConfig:
 
 class Router:
     """Network router implementation"""
-    def __init__(self, router_id: Tuple[int, ...], config: InterconnectConfig, 
-                 neighbors: List[Tuple[int, ...]]):
+    def __init__(self, router_id: Tuple[int, ...], config: InterconnectConfig,
+                 neighbors: List[Tuple[int, ...]],
+                 topology_dims: Optional[Tuple[int, int]] = None):
         self.router_id = router_id
         self.config = config
         self.neighbors = neighbors
+        self.topology_dims = topology_dims
         self.input_buffers = {neighbor: deque(maxlen=config.buffer_size_flits) 
                              for neighbor in neighbors + [router_id]}  # Include local port
         self.output_buffers = {neighbor: deque(maxlen=config.buffer_size_flits) 
@@ -88,7 +90,28 @@ class Router:
     def _build_mesh_routing_table(self):
         """Build routing table for mesh topology using dimension-order routing"""
         # For 2D mesh, route in X dimension first, then Y dimension
-        pass  # Simplified for now
+        if not self.topology_dims or len(self.topology_dims) != 2:
+            return
+
+        rows, cols = self.topology_dims
+        curr_x, curr_y = self.router_id
+
+        for x in range(rows):
+            for y in range(cols):
+                dest = (x, y)
+                if dest == self.router_id:
+                    self.routing_table[dest] = self.router_id
+                    continue
+
+                if curr_x != x:
+                    next_hop = (curr_x + 1, curr_y) if curr_x < x else (curr_x - 1, curr_y)
+                elif curr_y != y:
+                    next_hop = (curr_x, curr_y + 1) if curr_y < y else (curr_x, curr_y - 1)
+                else:
+                    next_hop = self.router_id
+
+                if next_hop in self.neighbors or next_hop == self.router_id:
+                    self.routing_table[dest] = next_hop
         
     def _build_bus_routing_table(self):
         """Build routing table for bus topology"""
@@ -260,7 +283,7 @@ class InterconnectNetwork:
                 if j < cols - 1:
                     neighbors.append((i, j+1))  # Right
                     
-                self.routers[router_id] = Router(router_id, self.config, neighbors)
+                self.routers[router_id] = Router(router_id, self.config, neighbors, self.topology_dims)
                 
         # Create links
         for router_id, router in self.routers.items():
@@ -281,12 +304,12 @@ class InterconnectNetwork:
         # Create bus controller at (0, 0)
         bus_controller_id = (0, 0)
         all_nodes = [(0, i) for i in range(num_nodes)]
-        self.routers[bus_controller_id] = Router(bus_controller_id, self.config, all_nodes[1:])
+        self.routers[bus_controller_id] = Router(bus_controller_id, self.config, all_nodes[1:], self.topology_dims)
         
         # Create other nodes
         for i in range(1, num_nodes):
             node_id = (0, i)
-            self.routers[node_id] = Router(node_id, self.config, [bus_controller_id])
+            self.routers[node_id] = Router(node_id, self.config, [bus_controller_id], self.topology_dims)
             
         # Create bus links
         for i in range(1, num_nodes):
