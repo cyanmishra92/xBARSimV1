@@ -117,12 +117,18 @@ class CrossbarArray:
         min_weight, max_weight = weight_matrix.min(), weight_matrix.max()
         min_conductance = 1.0 / self.config.r_off
         max_conductance = 1.0 / self.config.r_on
+
+        if max_weight == min_weight:
+            # Avoid division by zero when all weights are identical
+            normalized_matrix = np.full_like(weight_matrix, 0.5)
+        else:
+            normalized_matrix = (weight_matrix - min_weight) / (max_weight - min_weight)
         
         success = True
         for i in range(self.rows):
             for j in range(self.cols):
                 # Map weight to conductance
-                normalized_weight = (weight_matrix[i, j] - min_weight) / (max_weight - min_weight)
+                normalized_weight = normalized_matrix[i, j]
                 target_conductance = min_conductance + normalized_weight * (max_conductance - min_conductance)
                 target_resistance = 1.0 / target_conductance
                 
