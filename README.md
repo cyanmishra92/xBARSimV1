@@ -1,6 +1,6 @@
 # ReRAM Crossbar Simulator (xBARSimV1) 🚀
 
-A comprehensive, cycle-accurate simulator for ReRAM crossbar-based neural network accelerators supporting CNN and LLM workloads with WSL-friendly text-based visualization.
+A comprehensive, cycle-accurate simulator for ReRAM crossbar-based neural network accelerators with WSL-friendly text-based visualization. The current focus is on CNN-style networks, with planned LLM support.
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
