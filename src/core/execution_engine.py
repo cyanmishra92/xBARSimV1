@@ -107,7 +107,12 @@ class SystemIntegrator:
             latency_cycles=1,
             power_consumption_mw=3.0
         )
-        activations = [ActivationType.RELU, ActivationType.SIGMOID, ActivationType.TANH]
+        activations = [
+            ActivationType.RELU,
+            ActivationType.SIGMOID,
+            ActivationType.TANH,
+            ActivationType.SOFTMAX,
+        ]
         for i in range(max(1, num_tiles // 4)):
             self.compute_manager.add_activation_unit(activation_config, activations)
             
@@ -685,13 +690,15 @@ class ExecutionEngine:
         
         if self.system.compute_manager.activation_units:
             activation_unit = self.system.compute_manager.activation_units[0]
-            
+
             if activation_type == 'relu':
                 return activation_unit.apply_activation(input_data, ActivationType.RELU)
             elif activation_type == 'sigmoid':
                 return activation_unit.apply_activation(input_data, ActivationType.SIGMOID)
             elif activation_type == 'tanh':
                 return activation_unit.apply_activation(input_data, ActivationType.TANH)
+            elif activation_type == 'softmax':
+                return activation_unit.apply_activation(input_data, ActivationType.SOFTMAX)
                 
         # Fallback software implementation
         if activation_type == 'relu':
@@ -700,6 +707,10 @@ class ExecutionEngine:
             return 1 / (1 + np.exp(-np.clip(input_data, -500, 500)))
         elif activation_type == 'tanh':
             return np.tanh(input_data)
+        elif activation_type == 'softmax':
+            shift = input_data - np.max(input_data, axis=-1, keepdims=True)
+            exp_scores = np.exp(shift)
+            return exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
         else:
             return input_data
             
