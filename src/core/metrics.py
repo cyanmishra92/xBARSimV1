@@ -212,48 +212,84 @@ class MetricsCollector:
         # Aggregate latency metrics
         if "latency" in self.metrics_history:
             latencies = [entry["metrics"].total_latency for entry in self.metrics_history["latency"]]
-            summary["latency"] = {
-                "total_operations": len(latencies),
-                "average_latency": np.mean(latencies),
-                "min_latency": np.min(latencies),
-                "max_latency": np.max(latencies),
-                "std_latency": np.std(latencies)
-            }
+            if latencies:
+                summary["latency"] = {
+                    "total_operations": len(latencies),
+                    "average_latency": float(np.mean(latencies)),
+                    "min_latency": float(np.min(latencies)),
+                    "max_latency": float(np.max(latencies)),
+                    "std_latency": float(np.std(latencies))
+                }
+            else:
+                summary["latency"] = {
+                    "total_operations": 0,
+                    "average_latency": None,
+                    "min_latency": None,
+                    "max_latency": None,
+                    "std_latency": None
+                }
             
         # Aggregate power metrics
         if "power" in self.metrics_history:
             powers = [entry["metrics"].total_power for entry in self.metrics_history["power"]]
-            summary["power"] = {
-                "average_power": np.mean(powers),
-                "peak_power": np.max(powers),
-                "min_power": np.min(powers)
-            }
+            if powers:
+                summary["power"] = {
+                    "average_power": float(np.mean(powers)),
+                    "peak_power": float(np.max(powers)),
+                    "min_power": float(np.min(powers))
+                }
+            else:
+                summary["power"] = {
+                    "average_power": None,
+                    "peak_power": None,
+                    "min_power": None
+                }
             
         # Aggregate energy metrics
         if "energy" in self.metrics_history:
             energies = [entry["metrics"].total_energy for entry in self.metrics_history["energy"]]
-            summary["energy"] = {
-                "total_energy": np.sum(energies),
-                "average_energy_per_op": np.mean(energies)
-            }
+            if energies:
+                summary["energy"] = {
+                    "total_energy": float(np.sum(energies)),
+                    "average_energy_per_op": float(np.mean(energies))
+                }
+            else:
+                summary["energy"] = {
+                    "total_energy": 0.0,
+                    "average_energy_per_op": None
+                }
             
         # Aggregate throughput metrics
         if "throughput" in self.metrics_history:
             throughputs = [entry["metrics"].achieved_throughput for entry in self.metrics_history["throughput"]]
-            summary["throughput"] = {
-                "average_throughput": np.mean(throughputs),
-                "peak_throughput": np.max(throughputs),
-                "min_throughput": np.min(throughputs)
-            }
+            if throughputs:
+                summary["throughput"] = {
+                    "average_throughput": float(np.mean(throughputs)),
+                    "peak_throughput": float(np.max(throughputs)),
+                    "min_throughput": float(np.min(throughputs))
+                }
+            else:
+                summary["throughput"] = {
+                    "average_throughput": None,
+                    "peak_throughput": None,
+                    "min_throughput": None
+                }
             
         # Aggregate utilization metrics
         if "utilization" in self.metrics_history:
             utilizations = [entry["metrics"].overall_utilization for entry in self.metrics_history["utilization"]]
-            summary["utilization"] = {
-                "average_utilization": np.mean(utilizations),
-                "peak_utilization": np.max(utilizations),
-                "min_utilization": np.min(utilizations)
-            }
+            if utilizations:
+                summary["utilization"] = {
+                    "average_utilization": float(np.mean(utilizations)),
+                    "peak_utilization": float(np.max(utilizations)),
+                    "min_utilization": float(np.min(utilizations))
+                }
+            else:
+                summary["utilization"] = {
+                    "average_utilization": None,
+                    "peak_utilization": None,
+                    "min_utilization": None
+                }
             
         return summary
         
@@ -293,30 +329,65 @@ class MetricsCollector:
         print("=" * 60)
         
         if "latency" in summary:
-            print(f"Latency:")
-            print(f"  Average: {summary['latency']['average_latency']*1e6:.2f} μs")
-            print(f"  Min/Max: {summary['latency']['min_latency']*1e6:.2f} / {summary['latency']['max_latency']*1e6:.2f} μs")
-            print(f"  Operations: {summary['latency']['total_operations']}")
+            print("Latency:")
+            avg = summary['latency']['average_latency']
+            mn = summary['latency']['min_latency']
+            mx = summary['latency']['max_latency']
+            ops = summary['latency']['total_operations']
+            print(f"  Average: {avg*1e6:.2f} μs" if avg is not None else "  Average: N/A")
+            print(
+                f"  Min/Max: {mn*1e6:.2f} / {mx*1e6:.2f} μs" if mn is not None and mx is not None else "  Min/Max: N/A"
+            )
+            print(f"  Operations: {ops}")
             
         if "power" in summary:
             print(f"\nPower:")
-            print(f"  Average: {summary['power']['average_power']*1e3:.2f} mW")
-            print(f"  Peak: {summary['power']['peak_power']*1e3:.2f} mW")
+            avg = summary['power']['average_power']
+            peak = summary['power']['peak_power']
+            if avg is not None:
+                print(f"  Average: {avg*1e3:.2f} mW")
+            else:
+                print("  Average: N/A")
+            if peak is not None:
+                print(f"  Peak: {peak*1e3:.2f} mW")
+            else:
+                print("  Peak: N/A")
             
         if "energy" in summary:
             print(f"\nEnergy:")
-            print(f"  Total: {summary['energy']['total_energy']*1e6:.2f} μJ")
-            print(f"  Per Operation: {summary['energy']['average_energy_per_op']*1e9:.2f} nJ")
+            total = summary['energy']['total_energy']
+            avg_per = summary['energy']['average_energy_per_op']
+            print(f"  Total: {total*1e6:.2f} μJ")
+            if avg_per is not None:
+                print(f"  Per Operation: {avg_per*1e9:.2f} nJ")
+            else:
+                print("  Per Operation: N/A")
             
         if "throughput" in summary:
             print(f"\nThroughput:")
-            print(f"  Average: {summary['throughput']['average_throughput']/1e6:.2f} MOPS")
-            print(f"  Peak: {summary['throughput']['peak_throughput']/1e6:.2f} MOPS")
+            avg = summary['throughput']['average_throughput']
+            peak = summary['throughput']['peak_throughput']
+            if avg is not None:
+                print(f"  Average: {avg/1e6:.2f} MOPS")
+            else:
+                print("  Average: N/A")
+            if peak is not None:
+                print(f"  Peak: {peak/1e6:.2f} MOPS")
+            else:
+                print("  Peak: N/A")
             
         if "utilization" in summary:
             print(f"\nUtilization:")
-            print(f"  Average: {summary['utilization']['average_utilization']*100:.1f}%")
-            print(f"  Peak: {summary['utilization']['peak_utilization']*100:.1f}%")
+            avg = summary['utilization']['average_utilization']
+            peak = summary['utilization']['peak_utilization']
+            if avg is not None:
+                print(f"  Average: {avg*100:.1f}%")
+            else:
+                print("  Average: N/A")
+            if peak is not None:
+                print(f"  Peak: {peak*100:.1f}%")
+            else:
+                print("  Peak: N/A")
             
         print("=" * 60)
 
