@@ -10,6 +10,8 @@ import json
 import logging
 import numpy as np
 from pathlib import Path
+from dataclasses import fields
+from enum import Enum
 
 # Add src to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -228,6 +230,76 @@ def create_lenet_config() -> DNNConfig:
         precision=8 # Assuming 8-bit precision similar to other models
     )
 
+
+def _dataclass_from_dict(cls, data: dict):
+    """Helper to create dataclass instance from dictionary, ignoring unknown keys"""
+    if data is None:
+        data = {}
+    field_info = cls.__dataclass_fields__
+    kwargs = {}
+    for name, field in field_info.items():
+        if name in data:
+            val = data[name]
+            # Convert lists to tuples for fields expecting tuples
+            if isinstance(val, list):
+                val = tuple(val)
+            try:
+                if isinstance(field.type, type) and issubclass(field.type, Enum):
+                    val = field.type(val)
+            except Exception:
+                pass
+            kwargs[name] = val
+    return cls(**kwargs)
+
+
+def create_chip_config_from_dict(cfg: dict) -> ChipConfig:
+    """Build ChipConfig hierarchy from dictionary"""
+    supertile_dict = cfg.get('supertile_config', {})
+    tile_dict = supertile_dict.get('tile_config', {})
+    crossbar_dict = tile_dict.get('crossbar_config', {})
+
+    crossbar_config = _dataclass_from_dict(CrossbarConfig, crossbar_dict)
+
+    tile_dict = {k: v for k, v in tile_dict.items() if k != 'crossbar_config'}
+    tile_config = _dataclass_from_dict(TileConfig, tile_dict)
+    tile_config.crossbar_config = crossbar_config
+
+    supertile_dict = {k: v for k, v in supertile_dict.items() if k != 'tile_config'}
+    supertile_config = _dataclass_from_dict(SuperTileConfig, supertile_dict)
+    supertile_config.tile_config = tile_config
+
+    chip_dict = {k: v for k, v in cfg.items() if k != 'supertile_config'}
+    chip_config = _dataclass_from_dict(ChipConfig, chip_dict)
+    chip_config.supertile_config = supertile_config
+
+    return chip_config
+
+
+def create_dnn_config_from_dict(cfg: dict) -> DNNConfig:
+    """Build DNNConfig from dictionary"""
+    layer_dicts = cfg.get('layers', [])
+    layers = []
+    for ld in layer_dicts:
+        lt = LayerType(ld.get('layer_type'))
+        params = {k: (tuple(v) if isinstance(v, list) else v)
+                  for k, v in ld.items() if k != 'layer_type'}
+        layer = LayerConfig(layer_type=lt, **params)
+        layers.append(layer)
+
+    dnn_config = DNNConfig(
+        model_name=cfg.get('model_name', 'CustomModel'),
+        layers=layers,
+        input_shape=tuple(cfg.get('input_shape', ())),
+        output_shape=tuple(cfg.get('output_shape', ())),
+        precision=cfg.get('precision', 8)
+    )
+    return dnn_config
+
+
+def create_execution_config_from_dict(cfg: dict) -> ExecutionConfig:
+    """Build ExecutionConfig from dictionary"""
+    return _dataclass_from_dict(ExecutionConfig, cfg)
+
 def run_simulation(args):
     """Run the main simulation"""
     import numpy as np  # Import numpy in function scope
@@ -236,16 +308,23 @@ def run_simulation(args):
     print("=" * 60)
     
     # 1. Load or create configuration
+    config = {}
     if args.config:
         print(f"Loading configuration from {args.config}")
         config = load_config(args.config)
-        # TODO: Parse config and create objects
     else:
         print("Using default configuration")
         
     # 2. Create chip configuration
     print("\n1. Creating chip configuration...")
-    chip_config = create_default_chip_config()
+    if 'chip' in config:
+        try:
+            chip_config = create_chip_config_from_dict(config['chip'])
+        except Exception as e:
+            logging.error(f"Invalid chip configuration: {e}")
+            return False
+    else:
+        chip_config = create_default_chip_config()
     chip = ReRAMChip(chip_config)
     
     if args.verbose:
@@ -253,16 +332,23 @@ def run_simulation(args):
     
     # 3. Create DNN configuration
     print("\n2. Creating DNN configuration...")
-    if args.model == 'sample_cnn':
-        dnn_config = create_sample_dnn_config()
-    elif args.model == 'tiny_cnn':
-        dnn_config = create_tiny_cnn_config()
-    elif args.model == 'lenet':
-        dnn_config = create_lenet_config()
-    else: # Should not happen due to choices in argparse
-        logging.error(f"Unknown model: {args.model}")
-        return False
-    print(f"\nSelected DNN Model: {args.model.upper()}")
+    if 'dnn' in config:
+        try:
+            dnn_config = create_dnn_config_from_dict(config['dnn'])
+        except Exception as e:
+            logging.error(f"Invalid DNN configuration: {e}")
+            return False
+    else:
+        if args.model == 'sample_cnn':
+            dnn_config = create_sample_dnn_config()
+        elif args.model == 'tiny_cnn':
+            dnn_config = create_tiny_cnn_config()
+        elif args.model == 'lenet':
+            dnn_config = create_lenet_config()
+        else:  # Should not happen due to choices in argparse
+            logging.error(f"Unknown model: {args.model}")
+            return False
+    print(f"\nSelected DNN Model: {dnn_config.model_name}")
     dnn_manager = DNNManager(dnn_config, chip)
     
     if args.verbose:
@@ -301,13 +387,16 @@ def run_simulation(args):
     # 6. Run execution if requested
     if args.execute:
         print("\n5. Running inference...")
-        
+
         # Create execution engine
-        execution_config = ExecutionConfig(
-            enable_cycle_accurate_simulation=args.cycle_accurate,
-            enable_energy_modeling=True,
-            max_execution_cycles=args.max_cycles
-        )
+        if 'execution' in config:
+            execution_config = create_execution_config_from_dict(config['execution'])
+        else:
+            execution_config = ExecutionConfig(
+                enable_cycle_accurate_simulation=args.cycle_accurate,
+                enable_energy_modeling=True,
+                max_execution_cycles=args.max_cycles
+            )
         execution_engine = ExecutionEngine(chip, dnn_manager, execution_config)
         
         # Generate test input
