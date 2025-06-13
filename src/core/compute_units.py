@@ -12,6 +12,7 @@ class ActivationType(Enum):
     LEAKY_RELU = "leaky_relu"
     SWISH = "swish"
     GELU = "gelu"
+    SOFTMAX = "softmax"
 
 class PoolingType(Enum):
     MAX = "max"
@@ -147,6 +148,9 @@ class ActivationUnit:
                 self.luts[activation] = x_range / (1 + np.exp(-x_range))
             elif activation == ActivationType.GELU:
                 self.luts[activation] = 0.5 * x_range * (1 + np.tanh(np.sqrt(2/np.pi) * (x_range + 0.044715 * x_range**3)))
+            elif activation == ActivationType.SOFTMAX:
+                # Softmax is typically computed on vectors; LUT stores exp(x) for reuse
+                self.luts[activation] = np.exp(x_range)
                 
     def apply_activation(self, input_data: np.ndarray, 
                         activation_type: ActivationType) -> np.ndarray:
@@ -183,6 +187,11 @@ class ActivationUnit:
             result = input_data / (1 + np.exp(-np.clip(input_data, -500, 500)))
         elif activation_type == ActivationType.GELU:
             result = 0.5 * input_data * (1 + np.tanh(np.sqrt(2/np.pi) * (input_data + 0.044715 * input_data**3)))
+        elif activation_type == ActivationType.SOFTMAX:
+            # Softmax over the last dimension
+            shift = input_data - np.max(input_data, axis=-1, keepdims=True)
+            exp_x = np.exp(shift)
+            result = exp_x / np.sum(exp_x, axis=-1, keepdims=True)
         else:
             result = input_data  # Identity
             
