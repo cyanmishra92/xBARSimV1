@@ -350,38 +350,62 @@ class WebVisualizationServer:
                 print(f"Monitoring error: {e}")
                 time.sleep(1)
     
+    def _convert_to_json_serializable(self, obj):
+        """Convert objects to JSON serializable format"""
+        if isinstance(obj, dict):
+            return {key: self._convert_to_json_serializable(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_to_json_serializable(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return [self._convert_to_json_serializable(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.int32, np.int64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float32, np.float64)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif hasattr(obj, '__dict__'):
+            # For enum types and other objects, convert to string
+            return str(obj)
+        elif hasattr(obj, 'name'):
+            # For enum types with name attribute
+            return obj.name
+        else:
+            return obj
+
     def get_real_time_stats(self) -> Dict[str, Any]:
         """Get current statistics from the simulator"""
         if not self.execution_engine:
             return {}
             
         try:
-            # Get chip statistics
-            chip_stats = self.execution_engine.chip.get_total_statistics()
+            # Get chip statistics and make them JSON serializable
+            chip_stats_raw = self.execution_engine.chip.get_total_statistics()
+            chip_stats = self._convert_to_json_serializable(chip_stats_raw)
             
             # Create mock crossbar data (32 crossbars)
             crossbar_data = []
             for i in range(32):
                 crossbar_data.append({
                     'id': f'XB-{i}',
-                    'utilization': np.random.random() * 0.8,  # Mock utilization
+                    'utilization': float(np.random.random() * 0.8),  # Mock utilization
                     'operations': int(np.random.random() * 1000),
-                    'energy': np.random.random() * 0.01
+                    'energy': float(np.random.random() * 0.01)
                 })
             
             # Create mock memory data
             memory_data = {
                 'global_buffer': {
-                    'operations': chip_stats.get('memory', {}).get('global_buffer', {}).get('operations', 0),
-                    'memory_stats': {'utilization': np.random.random() * 0.3}
+                    'operations': int(chip_stats.get('memory', {}).get('global_buffer', {}).get('operations', 0)),
+                    'memory_stats': {'utilization': float(np.random.random() * 0.3)}
                 },
                 'shared_buffers': {
                     'operations': 0,
-                    'memory_stats': {'utilization': np.random.random() * 0.2}
+                    'memory_stats': {'utilization': float(np.random.random() * 0.2)}
                 },
                 'local_buffers': {
-                    'operations': chip_stats.get('memory', {}).get('local_buffers', {}).get('operations', 0),
-                    'memory_stats': {'utilization': np.random.random() * 0.5}
+                    'operations': int(chip_stats.get('memory', {}).get('local_buffers', {}).get('operations', 0)),
+                    'memory_stats': {'utilization': float(np.random.random() * 0.5)}
                 }
             }
             
@@ -390,8 +414,8 @@ class WebVisualizationServer:
                 'running': True,
                 'current_layer': 0,
                 'total_layers': 7,  # LeNet has 7 layers
-                'progress': np.random.random(),
-                'execution_cycles': chip_stats.get('performance', {}).get('total_cycles', 0)
+                'progress': float(np.random.random()),
+                'execution_cycles': int(chip_stats.get('performance', {}).get('total_cycles', 0))
             }
             
             return {
@@ -400,8 +424,8 @@ class WebVisualizationServer:
                 'memory': memory_data,
                 'execution': execution_data,
                 'peripherals': {
-                    'adc_utilization': np.random.random() * 0.6,
-                    'dac_utilization': np.random.random() * 0.6
+                    'adc_utilization': float(np.random.random() * 0.6),
+                    'dac_utilization': float(np.random.random() * 0.6)
                 }
             }
             
