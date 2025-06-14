@@ -50,6 +50,12 @@ class WebVisualizationServer:
         self.monitoring = False
         self.stats_thread = None
         
+        # Execution tracking
+        self.current_layer = 0
+        self.total_layers = 0
+        self.execution_running = False
+        self.layer_progress = {}
+        
         self.setup_routes()
         self.setup_socketio_events()
         
@@ -163,13 +169,21 @@ class WebVisualizationServer:
             
             // Update performance metrics
             if(data.chip) {
-                document.getElementById('total-operations').innerText = 
-                    (data.chip.performance?.total_operations || 0).toLocaleString();
+                const totalOps = data.peripherals?.total_crossbar_operations || data.chip.performance?.total_operations || 0;
+                document.getElementById('total-operations').innerText = totalOps.toLocaleString();
                 document.getElementById('execution-cycles').innerText = 
-                    (data.chip.execution_cycles || 0).toLocaleString();
+                    (data.execution?.execution_cycles || 0).toLocaleString();
                 
                 const energy = (data.chip.energy?.total_energy || 0) * 1000;
                 document.getElementById('energy-consumption').innerText = energy.toFixed(2) + ' mJ';
+            }
+            
+            // Update ADC/DAC information
+            if(data.peripherals) {
+                const adcUtil = (data.peripherals.adc_utilization || 0) * 100;
+                const dacUtil = (data.peripherals.dac_utilization || 0) * 100;
+                document.getElementById('adc-util').innerText = adcUtil.toFixed(1) + '%';
+                document.getElementById('dac-util').innerText = dacUtil.toFixed(1) + '%';
             }
             
             // Update crossbar activity
@@ -323,6 +337,47 @@ class WebVisualizationServer:
         """Connect to an execution engine for monitoring"""
         self.execution_engine = execution_engine
         
+        # Initialize tracking based on DNN configuration
+        if hasattr(execution_engine, 'dnn_manager') and execution_engine.dnn_manager:
+            self.total_layers = len(execution_engine.dnn_manager.dnn_config.layers)
+        
+    def update_execution_progress(self, current_layer: int, layer_progress: float = 0.0):
+        """Update the current execution progress"""
+        self.current_layer = current_layer
+        self.execution_running = True
+        self.layer_progress[current_layer] = layer_progress
+        
+    def set_execution_complete(self):
+        """Mark execution as complete"""
+        self.execution_running = False
+        self.current_layer = self.total_layers
+        
+    def execute_with_web_monitoring(self, input_data, **kwargs):
+        """Execute inference with web monitoring integration"""
+        if not self.execution_engine:
+            return {"success": False, "error": "No execution engine connected"}
+        
+        # Start execution tracking
+        self.execution_running = True
+        self.current_layer = 0
+        
+        # Patch the execution engine to report progress
+        original_execute = self.execution_engine.execute_inference
+        
+        def monitored_execute(input_data, **kwargs):
+            # Store reference to web server in execution engine for progress updates
+            self.execution_engine._web_server = self
+            
+            # Call original execution
+            result = original_execute(input_data, **kwargs)
+            
+            # Mark as complete
+            self.set_execution_complete()
+            return result
+        
+        # Execute with monitoring
+        return monitored_execute(input_data, **kwargs)
+        
     def start_monitoring(self):
         """Start real-time monitoring"""
         if self.monitoring:
@@ -379,44 +434,114 @@ class WebVisualizationServer:
             return {}
             
         try:
-            # Get chip statistics and make them JSON serializable
+            # Get real chip statistics
             chip_stats_raw = self.execution_engine.chip.get_total_statistics()
             chip_stats = self._convert_to_json_serializable(chip_stats_raw)
             
-            # Create mock crossbar data (32 crossbars)
+            # Get actual crossbar data from the chip
             crossbar_data = []
-            for i in range(32):
+            crossbar_index = 0
+            total_crossbar_ops = 0
+            total_adc_conversions = 0
+            total_dac_conversions = 0
+            
+            for supertile_idx, supertile in enumerate(self.execution_engine.chip.supertiles):
+                for tile_idx, tile in enumerate(supertile.tiles):
+                    for xb_idx, crossbar in enumerate(tile.crossbars):
+                        crossbar_stats = crossbar.get_statistics()
+                        operations = int(crossbar_stats.get('total_operations', 0))
+                        total_crossbar_ops += operations
+                        
+                        # Calculate utilization based on operations
+                        max_ops = 1000  # Normalize against reasonable maximum
+                        utilization = min(1.0, operations / max_ops) if max_ops > 0 else 0.0
+                        
+                        crossbar_data.append({
+                            'id': f'ST{supertile_idx}_T{tile_idx}_XB{xb_idx}',
+                            'utilization': float(utilization),
+                            'operations': operations,
+                            'energy': float(crossbar_stats.get('total_energy', 0))
+                        })
+                        crossbar_index += 1
+                        
+                        if crossbar_index >= 32:  # Limit to 32 for display
+                            break
+                    if crossbar_index >= 32:
+                        break
+                if crossbar_index >= 32:
+                    break
+            
+            # Pad with zeros if we have fewer than 32 crossbars
+            while len(crossbar_data) < 32:
                 crossbar_data.append({
-                    'id': f'XB-{i}',
-                    'utilization': float(np.random.random() * 0.8),  # Mock utilization
-                    'operations': int(np.random.random() * 1000),
-                    'energy': float(np.random.random() * 0.01)
+                    'id': f'XB-{len(crossbar_data)}',
+                    'utilization': 0.0,
+                    'operations': 0,
+                    'energy': 0.0
                 })
             
-            # Create mock memory data
+            # Get real ADC/DAC conversions from peripherals
+            for supertile in self.execution_engine.chip.supertiles:
+                for tile in supertile.tiles:
+                    if hasattr(tile, 'peripheral_manager'):
+                        pm = tile.peripheral_manager
+                        total_adc_conversions += sum(adc.conversion_count for adc in pm.output_adcs)
+                        total_dac_conversions += sum(dac.conversion_count for dac in pm.input_dacs)
+            
+            # Get real memory statistics
+            if hasattr(self.execution_engine, 'system') and hasattr(self.execution_engine.system, 'buffer_manager'):
+                memory_stats_raw = self.execution_engine.system.buffer_manager.get_all_statistics()
+                memory_stats = self._convert_to_json_serializable(memory_stats_raw)
+            else:
+                memory_stats = {}
+            
             memory_data = {
                 'global_buffer': {
-                    'operations': int(chip_stats.get('memory', {}).get('global_buffer', {}).get('operations', 0)),
-                    'memory_stats': {'utilization': float(np.random.random() * 0.3)}
+                    'operations': int(memory_stats.get('global_buffer', {}).get('operations', 0)),
+                    'memory_stats': {'utilization': memory_stats.get('global_buffer', {}).get('memory_stats', {}).get('utilization', 0)}
                 },
                 'shared_buffers': {
-                    'operations': 0,
-                    'memory_stats': {'utilization': float(np.random.random() * 0.2)}
+                    'operations': int(memory_stats.get('shared_buffers', {}).get('operations', 0)),
+                    'memory_stats': {'utilization': memory_stats.get('shared_buffers', {}).get('memory_stats', {}).get('utilization', 0)}
                 },
                 'local_buffers': {
-                    'operations': int(chip_stats.get('memory', {}).get('local_buffers', {}).get('operations', 0)),
-                    'memory_stats': {'utilization': float(np.random.random() * 0.5)}
+                    'operations': int(memory_stats.get('local_buffers', {}).get('operations', 0)),
+                    'memory_stats': {'utilization': memory_stats.get('local_buffers', {}).get('memory_stats', {}).get('utilization', 0)}
                 }
             }
             
-            # Create execution progress data
+            # Get current execution progress from the execution engine
+            current_layer = self.current_layer
+            total_layers = self.total_layers if self.total_layers > 0 else 7
+            
+            # Try to get more accurate progress from execution engine's layer log
+            if hasattr(self.execution_engine, 'layer_execution_log') and self.execution_engine.layer_execution_log:
+                completed_layers = len(self.execution_engine.layer_execution_log)
+                current_layer = min(completed_layers, total_layers - 1)
+                self.current_layer = current_layer
+            
+            # Calculate overall progress
+            if total_layers > 0:
+                layer_progress = (current_layer / total_layers) if current_layer < total_layers else 1.0
+            else:
+                layer_progress = 0.0
+            
+            # If execution is complete, set progress to 100%
+            if not self.execution_running and current_layer >= total_layers - 1:
+                layer_progress = 1.0
+            
             execution_data = {
-                'running': True,
-                'current_layer': 0,
-                'total_layers': 7,  # LeNet has 7 layers
-                'progress': float(np.random.random()),
+                'running': self.execution_running,
+                'current_layer': int(current_layer),
+                'total_layers': int(total_layers),
+                'progress': float(layer_progress),
                 'execution_cycles': int(chip_stats.get('performance', {}).get('total_cycles', 0))
             }
+            
+            # Calculate ADC/DAC utilization
+            max_conversions = 100000  # Reasonable maximum for normalization
+            adc_utilization = min(1.0, total_adc_conversions / max_conversions) if max_conversions > 0 else 0.0
+            dac_utilization = min(1.0, total_dac_conversions / max_conversions) if max_conversions > 0 else 0.0
             
             return {
                 'chip': chip_stats,
@@ -424,13 +549,18 @@ class WebVisualizationServer:
                 'memory': memory_data,
                 'execution': execution_data,
                 'peripherals': {
-                    'adc_utilization': float(np.random.random() * 0.6),
-                    'dac_utilization': float(np.random.random() * 0.6)
+                    'adc_utilization': float(adc_utilization),
+                    'dac_utilization': float(dac_utilization),
+                    'adc_conversions': int(total_adc_conversions),
+                    'dac_conversions': int(total_dac_conversions),
+                    'total_crossbar_operations': int(total_crossbar_ops)
                 }
             }
             
         except Exception as e:
             print(f"Error getting stats: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
     
     def run(self, debug=False, host='0.0.0.0'):

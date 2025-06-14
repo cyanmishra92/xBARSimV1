@@ -461,7 +461,11 @@ def run_simulation(args):
         test_input = np.random.randn(*dnn_config.input_shape)
         
         try:
-            result = execution_engine.execute_inference(test_input, enable_live_viz=args.live_viz)
+            # Use web-monitored execution if web server is available
+            if web_server:
+                result = web_server.execute_with_web_monitoring(test_input, enable_live_viz=args.live_viz)
+            else:
+                result = execution_engine.execute_inference(test_input, enable_live_viz=args.live_viz)
             
             if result['success']:
                 print("   ✓ Inference completed successfully!")
