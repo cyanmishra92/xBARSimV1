@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReRAM Crossbar Simulator - Live Dashboard</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.156.1/three.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e1a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 60px 1fr 1fr;
+            height: 100vh;
+            gap: 10px;
+            padding: 10px;
+        }
+        
+        .header {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header .controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #00d4aa;
+            color: #000;
+        }
+        
+        .btn-primary:hover {
+            background: #00b894;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #636e72;
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: #2d3436;
+        }
+        
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+        
+        .panel h3 {
+            margin-bottom: 15px;
+            color: #00d4aa;
+            font-size: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-connected {
+            background: #00d4aa;
+        }
+        
+        .status-disconnected {
+            background: #ff6b6b;
+        }
+        
+        .status-running {
+            background: #ffd93d;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .chip-3d-view {
+            height: 100%;
+            position: relative;
+        }
+        
+        .memory-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .memory-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            height: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .memory-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4aa, #00b894);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            position: relative;
+        }
+        
+        .memory-bar-label {
+            position: absolute;
+            top: 50%;
+            left: 8px;
+            transform: translateY(-50%);
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 2;
+        }
+        
+        .crossbar-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            height: 100%;
+        }
+        
+        .crossbar-cell {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            transition: all 0.3s ease;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .crossbar-cell:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(0, 212, 170, 0.5);
+        }
+        
+        .crossbar-cell.active {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            box-shadow: 0 0 5px rgba(255, 107, 107, 0.7);
+        }
+        
+        .crossbar-cell.medium {
+            background: linear-gradient(135deg, #ffd93d, #f39c12);
+        }
+        
+        .crossbar-cell.low {
+            background: linear-gradient(135deg, #00d4aa, #00b894);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            height: 100%;
+        }
+        
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #00d4aa;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #b0b8c1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .peripheral-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%;
+        }
+        
+        .peripheral-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .peripheral-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #b0b8c1;
+        }
+        
+        .peripheral-progress {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .peripheral-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        .peripheral-percentage {
+            position: absolute;
+            top: 50%;
+            right: 8px;
+            transform: translateY(-50%);
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        #connection-status {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #b0b8c1;
+        }
+        
+        .loading::after {
+            content: "";
+            width: 20px;
+            height: 20px;
+            border: 2px solid #b0b8c1;
+            border-top: 2px solid #00d4aa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>ReRAM Crossbar Simulator - Live Dashboard</h1>
+            <div class="controls">
+                <span id="connection-status">
+                    <span class="status-indicator status-disconnected"></span>
+                    Disconnected
+                </span>
+                <button id="start-monitoring" class="btn btn-primary">Start Monitoring</button>
+                <button id="stop-monitoring" class="btn btn-secondary">Stop Monitoring</button>
+                <a href="/educational" class="btn btn-secondary">Educational Tool</a>
+            </div>
+        </div>
+        
+        <!-- 3D Chip Visualization -->
+        <div class="panel">
+            <h3>🏗️ 3D Chip Architecture</h3>
+            <div id="chip-3d-view" class="chip-3d-view">
+                <div class="loading">Loading 3D Visualization</div>
+            </div>
+        </div>
+        
+        <!-- Memory System -->
+        <div class="panel">
+            <h3>💾 Memory System</h3>
+            <div class="memory-panel">
+                <div class="memory-item">
+                    <div class="memory-bar">
+                        <div class="memory-bar-fill" id="global-buffer-fill" style="width: 0%"></div>
+                        <div class="memory-bar-label">Global Buffer (DRAM)</div>
+                    </div>
+                </div>
+                <div class="memory-item">
+                    <div class="memory-bar">
+                        <div class="memory-bar-fill" id="shared-buffer-fill" style="width: 0%"></div>
+                        <div class="memory-bar-label">Shared Buffers (eDRAM)</div>
+                    </div>
+                </div>
+                <div class="memory-item">
+                    <div class="memory-bar">
+                        <div class="memory-bar-fill" id="local-buffer-fill" style="width: 0%"></div>
+                        <div class="memory-bar-label">Local Buffers (SRAM)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ADC/DAC Activity -->
+        <div class="panel">
+            <h3>🔄 Peripheral Activity</h3>
+            <div class="peripheral-bars">
+                <div class="peripheral-item">
+                    <div class="peripheral-label">ADC Conversions</div>
+                    <div class="peripheral-progress">
+                        <div class="peripheral-progress-fill" id="adc-progress" style="width: 0%"></div>
+                        <div class="peripheral-percentage" id="adc-percentage">0%</div>
+                    </div>
+                </div>
+                <div class="peripheral-item">
+                    <div class="peripheral-label">DAC Conversions</div>
+                    <div class="peripheral-progress">
+                        <div class="peripheral-progress-fill" id="dac-progress" style="width: 0%"></div>
+                        <div class="peripheral-percentage" id="dac-percentage">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Crossbar Heatmap -->
+        <div class="panel">
+            <h3>🔥 Crossbar Activity Heatmap</h3>
+            <div id="crossbar-heatmap" class="crossbar-grid">
+                <!-- Crossbar cells will be generated by JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Performance Metrics -->
+        <div class="panel">
+            <h3>📊 Performance Metrics</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="total-operations">0</div>
+                    <div class="metric-label">Total Operations</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="energy-consumption">0 mJ</div>
+                    <div class="metric-label">Energy</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="execution-cycles">0</div>
+                    <div class="metric-label">Execution Cycles</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="throughput">0 ops/s</div>
+                    <div class="metric-label">Throughput</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Execution Progress -->
+        <div class="panel">
+            <h3>⚡ Execution Progress</h3>
+            <div id="execution-progress">
+                <div class="loading">Waiting for execution data</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip"></div>
+    
+    <!-- Custom JavaScript -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    
+    <script>
+        // Initialize Dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            const dashboard = new ReRAMDashboard();
+            dashboard.init();
+        });
+    </script>
+</body>
+</html>

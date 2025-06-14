@@ -384,9 +384,35 @@ def run_simulation(args):
             print("   Use --force to continue anyway")
             return False
     
-    # 6. Run execution if requested
+    # 6. Setup web visualization if requested
+    web_server = None
+    if args.web_viz:
+        try:
+            from visualization.web_viz import create_web_visualization_server
+            print(f"\n5. Starting web visualization server on port {args.web_port}...")
+            web_server = create_web_visualization_server(port=args.web_port)
+            
+            # Start web server in a separate thread
+            import threading
+            web_thread = threading.Thread(target=lambda: web_server.run(debug=False))
+            web_thread.daemon = True
+            web_thread.start()
+            
+            print(f"   🌐 Web Dashboard: http://localhost:{args.web_port}/")
+            print(f"   🎓 Educational Tool: http://localhost:{args.web_port}/educational")
+            
+        except ImportError as e:
+            print(f"   ⚠️  Web visualization not available: {e}")
+            print("   Install required packages: pip install flask flask-socketio")
+            web_server = None
+        except Exception as e:
+            print(f"   ⚠️  Failed to start web server: {e}")
+            web_server = None
+
+    # 7. Run execution if requested
     if args.execute:
-        print("\n5. Running inference...")
+        step_num = "6" if args.web_viz else "5"
+        print(f"\n{step_num}. Running inference...")
 
         # Create execution engine
         if 'execution' in config:
@@ -398,6 +424,12 @@ def run_simulation(args):
                 max_execution_cycles=args.max_cycles
             )
         execution_engine = ExecutionEngine(chip, dnn_manager, execution_config)
+        
+        # Connect to web server if available
+        if web_server:
+            web_server.connect_execution_engine(execution_engine)
+            if not args.live_viz:  # Start monitoring for web visualization
+                web_server.start_monitoring()
         
         # Generate test input
         import numpy as np
@@ -468,9 +500,10 @@ def run_simulation(args):
                 traceback.print_exc()
             return False
     
-    # 7. Generate visualizations if requested
+    # 8. Generate visualizations if requested
     if args.visualize:
-        print("\n6. Generating text-based visualization...")
+        step_num = "7" if args.web_viz else "6"
+        print(f"\n{step_num}. Generating text-based visualization...")
         try:
             if args.execute and 'result' in locals():
                 create_complete_text_report(chip, dnn_manager, result)
@@ -492,8 +525,24 @@ def run_simulation(args):
         except Exception as e:
             logging.warning(f"Could not start architecture explorer: {e}")
     
+    # Keep web server running if requested
+    if args.web_viz and web_server:
+        print(f"\n🌐 Web visualization server running at http://localhost:{args.web_port}/")
+        print("   Press Ctrl+C to stop the server")
+        try:
+            # Keep the main thread alive to serve web requests
+            import time
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n🛑 Web server stopped")
+            if web_server:
+                web_server.stop_monitoring()
+    
     print("\n" + "=" * 60)
     print("Simulation completed successfully!")
+    if args.web_viz:
+        print("Web visualization server may still be running...")
     print("=" * 60)
     
     return True
@@ -561,6 +610,10 @@ Examples:
         choices=['sample_cnn', 'tiny_cnn', 'lenet'],
         help='Selects the DNN model to run (default: sample_cnn)'
     )
+    parser.add_argument('--web-viz', action='store_true',
+                       help='Enable web-based visualization dashboard')
+    parser.add_argument('--web-port', type=int, default=8080,
+                       help='Port for web visualization server (default: 8080)')
     
     args = parser.parse_args()
     
