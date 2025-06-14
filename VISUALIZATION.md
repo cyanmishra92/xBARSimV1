@@ -1,14 +1,147 @@
 # ReRAM Crossbar Simulator - Visualization & Monitoring Guide
 
-This document describes the enhanced visualization and monitoring capabilities of the ReRAM Crossbar Simulator.
+This document describes the comprehensive visualization and monitoring capabilities of the ReRAM Crossbar Simulator.
 
 ## 🎯 Overview
 
-The simulator now provides three levels of visualization and analysis:
+The simulator provides four levels of visualization and analysis:
 
-1. **Live Visualization** - Real-time monitoring during execution
-2. **Interactive Architecture Explorer** - Menu-driven hardware exploration  
-3. **Comprehensive Text Reports** - Detailed post-execution analysis
+1. **🌐 Web-Based Dashboard** - Real-time browser visualization with 3D graphics (RECOMMENDED)
+2. **🎓 Educational Web Tool** - Interactive CNN mapping tutorial for students  
+3. **🔄 Live Terminal Visualization** - Real-time monitoring in terminal
+4. **🏗️ Interactive Architecture Explorer** - Menu-driven hardware exploration  
+5. **📊 Comprehensive Text Reports** - Detailed post-execution analysis
+
+## 🌐 Web-Based Visualization (NEW & RECOMMENDED)
+
+### Purpose
+Experience the most advanced ReRAM simulation visualization through your web browser:
+- **Real-time 3D chip visualization** with Three.js
+- **Interactive crossbar heatmaps** with D3.js  
+- **Live performance monitoring** with WebSocket updates
+- **Educational CNN mapping tutorials** for students
+- **Multi-device access** - view simulations from any device
+- **Publication-quality visualizations** for research presentations
+
+### Installation
+```bash
+# Install required dependencies
+pip install flask>=2.3.0 flask-socketio>=5.3.0
+
+# Verify installation
+python main.py --model tiny_cnn --execute --web-viz
+# Should show: "🌐 Web Dashboard: http://localhost:8080/"
+```
+
+### Usage
+```bash
+# Real-time monitoring dashboard (researchers)
+python main.py --model sample_cnn --execute --web-viz
+# Open: http://localhost:8080/
+
+# Educational mapping tool (students)  
+python main.py --model tiny_cnn --execute --web-viz
+# Open: http://localhost:8080/educational
+
+# Custom port for multi-user access
+python main.py --model lenet --execute --web-viz --web-port 9090
+
+# Combined with terminal monitoring
+python main.py --model sample_cnn --execute --web-viz --live-viz --verbose
+```
+
+### 🎓 Educational Dashboard (`/educational`)
+
+**Purpose**: Interactive step-by-step learning tool for understanding CNN-to-crossbar mapping
+
+**Features**:
+- **Step-by-Step Tutorial**: 5-stage guided learning process
+- **CNN Architecture Visualization**: Interactive layer structure exploration
+- **Weight Matrix Decomposition**: See how 4D tensors become 2D crossbar arrays
+- **Real-time Allocation Animation**: Watch crossbars being allocated to layers
+- **Interactive Tooltips**: Detailed explanations of mapping concepts
+- **Progress Tracking**: Monitor learning completion across tutorial steps
+
+**Tutorial Steps**:
+1. **CNN Architecture Analysis** - Understand layer structure and parameters
+2. **Weight Reshaping** - Learn 4D to 2D tensor transformations  
+3. **Crossbar Allocation** - See hardware mapping in action
+4. **Data Flow Visualization** - Understand execution pathways
+5. **Live Execution Monitoring** - Real-time performance observation
+
+```bash
+# Start educational tool with different models
+python main.py --model tiny_cnn --execute --web-viz     # Beginner friendly
+python main.py --model sample_cnn --execute --web-viz   # Intermediate
+python main.py --model lenet --execute --web-viz        # Advanced
+```
+
+### ⚡ Real-Time Dashboard (`/`)
+
+**Purpose**: Professional monitoring interface for researchers and developers
+
+**Key Panels**:
+
+#### 🔥 Crossbar Activity Heatmap
+- **32 crossbar grid** with real-time utilization coloring
+- **Hover tooltips** showing operations, energy, utilization percentage
+- **Activity indicators**: Red (high), Yellow (medium), Green (low), Blue (idle)
+- **Smooth animations** for activity transitions
+
+#### 🧠 3D Chip Visualization  
+- **Interactive Three.js scene** with zoom, pan, rotate controls
+- **Hierarchical rendering**: SuperTiles → Tiles → Crossbars
+- **Real-time activity pulsing** based on utilization levels
+- **Color-coded components** with utilization-based coloring
+- **Lighting effects** and realistic material rendering
+
+#### 📊 Performance Metrics Panel
+- **Live throughput** (operations per second)
+- **Total operations counter** with real-time updates
+- **Energy consumption tracking** (mJ)
+- **Execution cycle monitoring** 
+- **Historical performance graphs**
+
+#### 💾 Memory Hierarchy Monitoring
+- **Global Buffer utilization** with animated progress bars
+- **Shared Buffer monitoring** across SuperTiles
+- **Local Buffer tracking** for individual Tiles
+- **Memory access latency visualization**
+
+#### ⚙️ Peripheral Activity Tracking
+- **ADC utilization percentage** with real-time updates
+- **DAC conversion monitoring** 
+- **Analog-digital conversion statistics**
+- **Peripheral efficiency metrics**
+
+#### 📈 Execution Progress
+- **Current layer indicator** with progress percentage
+- **Layer-by-layer completion tracking**
+- **Execution timeline visualization**
+- **Performance predictions** and completion estimates
+
+### 🌐 Web Interface Benefits
+
+#### For Researchers
+- **Real-time Insights**: Identify bottlenecks immediately during execution
+- **Publication Quality**: High-resolution screenshots and visualizations for papers
+- **Comparative Analysis**: Multiple browser tabs for simultaneous comparison
+- **Remote Monitoring**: Monitor long-running simulations from anywhere
+- **Data Export**: JSON export of all visualization data
+
+#### For Educators  
+- **Classroom Demonstrations**: Large screen visualization for teaching
+- **Student Engagement**: Interactive tutorials keep students involved
+- **Progress Tracking**: Monitor student completion of tutorial steps
+- **Customizable Scenarios**: Easily switch between different CNN models
+- **Assessment Integration**: Built-in understanding checkpoints
+
+#### For Students
+- **Visual Learning**: See abstract concepts in interactive 3D
+- **Self-Paced Learning**: Complete tutorials at individual speed  
+- **Immediate Feedback**: Real-time visualization of mapping concepts
+- **Hands-On Experience**: Interactive exploration builds understanding
+- **Multi-Device Access**: Study from laptop, tablet, or phone
 
 ## 🔄 Live Visualization
 
@@ -367,6 +500,80 @@ python main.py --model tiny_cnn --execute --visualize
 # Install unicode font support if symbols appear as boxes
 ```
 
+### Web Visualization Troubleshooting
+
+**Web Server Not Starting**
+```bash
+# Check if dependencies are installed
+pip install flask flask-socketio
+
+# Verify Python version (requires 3.8+)
+python --version
+
+# Check if port is available
+python main.py --model tiny_cnn --execute --web-viz --web-port 9090
+```
+
+**Dashboard Shows "Disconnected"**
+```bash
+# Check browser console (F12) for WebSocket errors
+# Common issues:
+# 1. Firewall blocking WebSocket connections
+# 2. Browser security settings
+# 3. Network proxy issues
+
+# Solution: Try different port and check firewall
+python main.py --model tiny_cnn --execute --web-viz --web-port 8081
+```
+
+**3D Visualization Not Loading**
+```bash
+# Check browser compatibility:
+# Supported: Chrome 60+, Firefox 55+, Safari 12+, Edge 79+
+
+# Check browser console for Three.js errors
+# Ensure WebGL is enabled:
+# Chrome: Go to chrome://flags/ and enable WebGL
+# Firefox: Go to about:config and set webgl.force-enabled to true
+```
+
+**Educational Tool Not Responding**
+```bash
+# Ensure simulation is running with web visualization enabled
+python main.py --model sample_cnn --execute --web-viz
+
+# Check if educational.js is loading properly
+# Open browser console (F12) and look for JavaScript errors
+```
+
+**Performance Issues with Web Interface**
+```bash
+# Reduce update frequency by using larger models (slower execution)
+python main.py --model lenet --execute --web-viz
+
+# For faster web updates, use smaller models
+python main.py --model tiny_cnn --execute --web-viz
+
+# Limit browser tabs to reduce resource usage
+```
+
+### Browser Compatibility
+
+**Recommended Browsers**:
+- **Chrome 60+**: Full feature support, best performance
+- **Firefox 55+**: Full feature support, good performance  
+- **Safari 12+**: Full feature support, moderate performance
+- **Edge 79+**: Full feature support, good performance
+
+**Not Supported**:
+- Internet Explorer (any version)
+- Chrome < 60, Firefox < 55, Safari < 12
+
+**Mobile Devices**:
+- iOS Safari 12+: Educational tool works, 3D visualization limited
+- Android Chrome 60+: Full support on newer devices
+- Performance depends on device capabilities
+
 ### Recent Fixes & Updates
 
 **ADC Units Error (FIXED)**
@@ -385,4 +592,14 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
 # Or use the main.py interface which handles paths automatically
 ```
 
-This visualization system provides unprecedented insight into ReRAM crossbar neural network accelerator operation, making it an invaluable tool for research, development, and education.
+**Web Visualization Dependencies**
+Web visualization requires additional dependencies that are installed separately:
+```bash
+# Install web dependencies
+pip install flask>=2.3.0 flask-socketio>=5.3.0
+
+# Verify installation
+python -c "import flask, flask_socketio; print('Web dependencies installed successfully')"
+```
+
+This comprehensive visualization system provides unprecedented insight into ReRAM crossbar neural network accelerator operation, making it an invaluable tool for research, development, and education. The new web-based interface brings professional-grade visualization capabilities to any device with a modern web browser.

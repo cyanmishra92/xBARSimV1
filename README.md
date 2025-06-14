@@ -21,10 +21,17 @@ source xbarsim_env/bin/activate  # Linux/Mac
 # Install dependencies
 pip install -r requirements.txt
 
+# For web visualization (optional but recommended)
+pip install flask flask-socketio
+
 # Verify installation
 python main.py --model tiny_cnn --execute
 
-# Run with visualization
+# Run with web-based visualization 🆕
+python main.py --model sample_cnn --execute --web-viz
+# Then open: http://localhost:8080/
+
+# Run with traditional text visualization
 python main.py --model sample_cnn --execute --visualize
 
 # Try different models
@@ -65,11 +72,14 @@ python examples/demo_models.py
 - **Performance Optimization**: Hardware recommendations for given DNNs
 
 ### ✅ **Advanced Visualization & Monitoring** 🆕
-- **Live Visualization**: Real-time monitoring during execution with `--live-viz`
-- **Interactive Architecture Explorer**: Menu-driven hardware exploration with `--explore-arch`
-- **Comprehensive Text Reports**: Detailed hardware analysis, bottleneck identification, energy breakdown
-- **Hardware Activity Tracking**: Live crossbar operations, ADC/DAC usage, memory operations
-- **Performance Profiling**: Layer execution timelines, utilization charts, optimization recommendations
+- **🌐 Web-Based Dashboard**: Real-time monitoring via browser interface with `--web-viz`
+- **🎓 Educational CNN Mapping Tool**: Interactive step-by-step visualization for learning
+- **🔥 3D Hardware Visualization**: Interactive Three.js chip architecture exploration
+- **📊 Real-time Heatmaps**: Live crossbar activity and memory utilization tracking
+- **⚡ Live Performance Metrics**: Operations/sec, energy consumption, execution cycles
+- **🔄 Live Visualization**: Terminal-based real-time monitoring with `--live-viz`
+- **🏗️ Interactive Architecture Explorer**: Menu-driven hardware exploration with `--explore-arch`
+- **📈 Comprehensive Text Reports**: Detailed hardware analysis, bottleneck identification, energy breakdown
 
 ### ✅ **Simulation Features**
 - **Cycle-Accurate Timing**: Precise modeling of all hardware components
@@ -134,6 +144,16 @@ pip install -r requirements.txt
 python main.py --model tiny_cnn --execute
 ```
 
+### Web Visualization Installation 🆕
+```bash
+# Install web visualization dependencies (recommended)
+pip install flask>=2.3.0 flask-socketio>=5.3.0
+
+# Verify web visualization works
+python main.py --model tiny_cnn --execute --web-viz
+# Open browser: http://localhost:8080/
+```
+
 ### Manual Installation (Core Dependencies Only)
 ```bash
 # Minimal installation for basic functionality
@@ -158,7 +178,22 @@ python main.py --model tiny_cnn --execute
 python main.py --model sample_cnn --execute --visualize
 ```
 
-### Example 2: Live Visualization (Real-time Monitoring) 🆕
+### Example 2: Web-Based Visualization 🌐 (Recommended)
+```bash
+# Interactive web dashboard (prompts for browser setup)
+python main.py --model lenet --execute --web-viz --cycle-accurate
+# 1. Server starts and displays clickable links
+# 2. Open http://localhost:8080/ in browser
+# 3. Press ENTER to start simulation with real-time monitoring
+
+# Auto-start without prompt (for scripts)
+python main.py --model sample_cnn --execute --web-viz --auto-start
+
+# Custom port for multi-user access
+python main.py --model lenet --execute --web-viz --web-port 9090
+```
+
+### Example 3: Live Terminal Visualization 🆕
 ```bash
 # Basic live visualization during execution
 python main.py --model tiny_cnn --execute --live-viz
@@ -167,7 +202,7 @@ python main.py --model tiny_cnn --execute --live-viz
 python main.py --model sample_cnn --execute --live-viz --visualize --verbose
 ```
 
-### Example 3: Interactive Architecture Explorer 🆕
+### Example 4: Interactive Architecture Explorer 🆕
 ```bash
 # Explore chip architecture interactively (no execution required)
 python main.py --explore-arch
@@ -176,7 +211,7 @@ python main.py --explore-arch
 python main.py --model tiny_cnn --execute --live-viz --explore-arch
 ```
 
-### Example 4: Comprehensive Analysis & Reporting 🆕
+### Example 5: Comprehensive Analysis & Reporting 🆕
 ```bash
 # Generate detailed hardware analysis report
 python main.py --model sample_cnn --execute --visualize --output results.json
@@ -260,10 +295,66 @@ python main.py --model lenet --execute --visualize --verbose
 
 **Note**: If no `--model` is specified, `sample_cnn` is used by default.
 
-## 🎯 New Visualization Features
+## 🌐 Web-Based Simulation Tools
 
-### 🔄 Live Visualization
-Monitor your ReRAM execution in real-time:
+### 🎓 Educational Dashboard
+Interactive learning platform for understanding CNN-to-crossbar mapping:
+```bash
+# Start educational tool
+python main.py --model sample_cnn --execute --web-viz
+# Open: http://localhost:8080/educational
+```
+
+**Features:**
+- **Step-by-Step Tutorial**: Interactive walkthrough of CNN mapping process
+- **Layer-by-Layer Analysis**: Visualize how each CNN layer maps to crossbars
+- **Weight Matrix Decomposition**: See how 4D tensors become 2D crossbar arrays
+- **Real-time Allocation**: Watch crossbars being allocated during mapping
+- **Student-Friendly Interface**: Designed for learning and teaching
+
+### ⚡ Real-Time Monitoring Dashboard
+Live hardware monitoring during simulation execution:
+```bash
+# Start monitoring dashboard
+python main.py --model tiny_cnn --execute --web-viz
+# Open: http://localhost:8080/
+```
+
+**Features:**
+- **🔥 Crossbar Heatmaps**: Real-time activity visualization with D3.js
+- **🧠 3D Chip Visualization**: Interactive Three.js hardware exploration
+- **📊 Performance Metrics**: Live throughput, energy, and utilization tracking
+- **💾 Memory Monitoring**: Buffer utilization across all hierarchy levels
+- **⚙️ Peripheral Activity**: ADC/DAC conversion tracking
+- **📈 Execution Progress**: Layer-by-layer execution monitoring
+
+### 🎯 Key Web Visualization Benefits
+- **Immediate Feedback**: See simulation results in real-time via browser
+- **Multi-User Access**: Multiple researchers can view same simulation
+- **Educational Value**: Perfect for classroom demonstrations
+- **Publication Quality**: High-resolution exports for papers
+- **Cross-Platform**: Works on any device with a web browser
+
+### 📱 Web Interface Components
+
+#### Real-Time Dashboard (`http://localhost:8080/`)
+- **Crossbar Activity Grid**: 32 crossbars with color-coded utilization
+- **Memory Hierarchy Bars**: Global, shared, and local buffer utilization
+- **Performance Metrics Panel**: Operations/sec, energy consumption, cycles
+- **3D Chip Visualization**: Interactive hardware exploration
+- **Execution Progress**: Current layer and completion percentage
+
+#### Educational Tool (`http://localhost:8080/educational`)
+- **Tutorial Navigation**: 5-step interactive learning process
+- **CNN Model Viewer**: Layer structure and parameter visualization
+- **Crossbar Mapping Viewer**: Real-time allocation demonstration
+- **Weight Matrix Analysis**: Tensor decomposition explanations
+- **Progress Tracking**: Step completion and learning analytics
+
+## 🎯 Traditional Visualization Features
+
+### 🔄 Live Terminal Visualization
+Monitor your ReRAM execution in real-time via terminal:
 - **Layer Progress**: See execution progress for each DNN layer
 - **Hardware Activity**: Live crossbar operations and utilization
 - **Memory Monitoring**: Real-time buffer access patterns and latencies
@@ -274,7 +365,7 @@ python main.py --execute --live-viz
 ```
 
 ### 🏗️ Interactive Architecture Explorer
-Explore your hardware configuration:
+Explore your hardware configuration via terminal interface:
 - **Chip Overview**: Total crossbars, memory hierarchy, capacity
 - **Component Details**: Drill down into SuperTiles, Tiles, Crossbars
 - **Live Statistics**: Real-time hardware utilization and operation counts
@@ -546,6 +637,24 @@ print_performance_summary(statistics)
 
 ## 📖 API Reference
 
+### Command Line Interface
+```bash
+# Basic simulation
+python main.py --model tiny_cnn --execute
+
+# Web-based visualization (recommended)
+python main.py --model sample_cnn --execute --web-viz --web-port 8080
+
+# Terminal-based live monitoring
+python main.py --model lenet --execute --live-viz --visualize
+
+# Architecture exploration
+python main.py --explore-arch
+
+# Full analysis with output
+python main.py --model sample_cnn --execute --web-viz --visualize --output results.json
+```
+
 ### Core Functions
 ```python
 # Quick setup
@@ -558,6 +667,12 @@ chip = ReRAMChip(chip_config)
 dnn_manager = DNNManager(dnn_config, chip)
 execution_engine = ExecutionEngine(chip, dnn_manager)
 result = execution_engine.execute_inference(input_data)
+
+# Web visualization setup
+from visualization.web_viz import create_web_visualization_server
+web_server = create_web_visualization_server(port=8080)
+web_server.connect_execution_engine(execution_engine)
+web_server.start_monitoring()
 ```
 
 ### Key Methods
@@ -565,6 +680,8 @@ result = execution_engine.execute_inference(input_data)
 - `dnn_manager.map_dnn_to_hardware(weights)` - Map neural network
 - `execution_engine.execute_inference(input)` - Run inference
 - `metrics_collector.get_summary_metrics()` - Get performance data
+- `web_server.start_monitoring()` - Begin real-time web visualization
+- `web_server.get_real_time_stats()` - Get current hardware statistics
 
 ## 📁 Examples Library
 
@@ -584,6 +701,26 @@ python main.py --model tiny_cnn --execute --visualize
 
 # Run LeNet with main.py
 python main.py --model lenet --execute --visualize
+```
+
+### Web Visualization Examples
+```bash
+# Interactive setup (recommended for first-time users)
+python main.py --model lenet --execute --web-viz --cycle-accurate
+# → Displays links, waits for browser setup, then starts monitoring
+
+# Quick auto-start for experienced users
+python main.py --model sample_cnn --execute --web-viz --auto-start
+
+# Educational tool with cycle-accurate timing
+python main.py --model tiny_cnn --execute --web-viz --cycle-accurate
+# → Open educational tool at http://localhost:8080/educational
+
+# Combined web + terminal visualization
+python main.py --model lenet --execute --web-viz --live-viz --verbose --auto-start
+
+# Custom port for multi-user access
+python main.py --model sample_cnn --execute --web-viz --web-port 9090
 ```
 
 ### Model Examples
@@ -740,6 +877,11 @@ python main.py --model lenet --execute && echo "✓ LeNet works"
 # Test visualization features
 python main.py --model tiny_cnn --execute --visualize && echo "✓ Visualization works"
 python main.py --explore-arch && echo "✓ Architecture explorer works"
+python main.py --model tiny_cnn --execute --live-viz && echo "✓ Live visualization works"
+
+# Test web visualization (requires Flask)
+python main.py --model tiny_cnn --execute --web-viz --auto-start && echo "✓ Web visualization works"
+# Manual check: Open http://localhost:8080/ and verify dashboard loads
 
 # Test output generation
 python main.py --model tiny_cnn --execute --output test_output.json && echo "✓ JSON output works"
@@ -833,7 +975,35 @@ python main.py --model sample_cnn --execute --max-cycles 10000
 
 #### **Visualization Issues**
 
-**Q: Live visualization not working**
+**Q: Web visualization not working**
+```bash
+# Check if dependencies are installed
+pip install flask flask-socketio
+
+# Test web server manually
+python main.py --model tiny_cnn --execute --web-viz
+# Should show: "🌐 Web Dashboard: http://localhost:8080/"
+
+# If port is occupied, try different port
+python main.py --model tiny_cnn --execute --web-viz --web-port 9090
+```
+
+**Q: Web dashboard shows "Disconnected"**
+```bash
+# Check if WebSocket connection is working
+# Open browser console (F12) and look for connection errors
+# Try restarting the simulation with web visualization enabled
+python main.py --model tiny_cnn --execute --web-viz
+```
+
+**Q: 3D visualization not loading**
+```bash
+# Check browser console for Three.js errors
+# Ensure you have a modern browser (Chrome, Firefox, Safari, Edge)
+# Try refreshing the page or restarting the simulation
+```
+
+**Q: Live terminal visualization not working**
 ```bash
 # Check if your terminal supports ANSI escape sequences
 echo -e "\033[31mRed text\033[0m"  # Should show red text

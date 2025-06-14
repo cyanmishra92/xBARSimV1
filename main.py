@@ -398,8 +398,33 @@ def run_simulation(args):
             web_thread.daemon = True
             web_thread.start()
             
-            print(f"   🌐 Web Dashboard: http://localhost:{args.web_port}/")
-            print(f"   🎓 Educational Tool: http://localhost:{args.web_port}/educational")
+            # Give server a moment to start
+            import time
+            time.sleep(2)
+            
+            print("   ✅ Web visualization server started successfully!")
+            print("")
+            print("   🌐 OPEN WEB DASHBOARD:")
+            print(f"   ➤ Real-time Monitoring: http://localhost:{args.web_port}/")
+            print(f"   ➤ Educational Tool: http://localhost:{args.web_port}/educational")
+            print("")
+            print("   📋 Instructions:")
+            print("   1. Click on the links above to open web visualization in your browser")
+            print("   2. The real-time dashboard will show live monitoring during execution")
+            print("   3. The educational tool provides step-by-step CNN mapping tutorial")
+            print("")
+            
+            if args.execute and not args.auto_start:
+                # Prompt user to continue only if executing and not auto-starting
+                try:
+                    input("   ⏸️  Press ENTER when ready to start simulation with web monitoring...")
+                except (EOFError, KeyboardInterrupt):
+                    print("\n   🛑 Simulation cancelled by user")
+                    return False
+                print("")
+            elif args.execute and args.auto_start:
+                print("   🚀 Auto-starting simulation with web monitoring...")
+                print("")
             
         except ImportError as e:
             print(f"   ⚠️  Web visualization not available: {e}")
@@ -557,7 +582,13 @@ Examples:
   # Run basic simulation with default config
   python main.py --execute --visualize
   
-  # Run with live visualization (real-time monitoring)
+  # Web visualization (recommended) - prompts before starting
+  python main.py --model lenet --execute --web-viz --cycle-accurate
+  
+  # Auto-start web visualization (no prompt)
+  python main.py --model sample_cnn --execute --web-viz --auto-start
+  
+  # Run with live terminal visualization 
   python main.py --execute --live-viz
   
   # Explore chip architecture interactively
@@ -566,15 +597,12 @@ Examples:
   # Run with custom configuration
   python main.py --config my_config.json --execute --output results.json
   
-  # Run cycle-accurate simulation with live monitoring
-  python main.py --execute --cycle-accurate --live-viz --max-cycles 100000
-  
   # Generate comprehensive analysis with architecture exploration
   python main.py --execute --visualize --explore-arch
 
   # Run with a specific model (e.g., tiny_cnn, lenet)
   python main.py --model tiny_cnn --execute --visualize
-  python main.py --model lenet --execute
+  python main.py --model lenet --execute --web-viz
         """
     )
     
@@ -614,6 +642,8 @@ Examples:
                        help='Enable web-based visualization dashboard')
     parser.add_argument('--web-port', type=int, default=8080,
                        help='Port for web visualization server (default: 8080)')
+    parser.add_argument('--auto-start', action='store_true',
+                       help='Skip web visualization prompt and start simulation automatically')
     
     args = parser.parse_args()
     
