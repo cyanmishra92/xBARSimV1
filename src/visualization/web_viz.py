@@ -154,6 +154,10 @@ class WebVisualizationServer:
                 <div id="connection-status">
                     <span class="status-indicator status-idle"></span>Disconnected
                 </div>
+                <div style="margin-top: 10px;">
+                    <button id="arch-start-btn" onclick="startArchitectureMonitoring()" style="background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Start Monitor</button>
+                    <button id="arch-stop-btn" onclick="stopArchitectureMonitoring()" style="background: #f44336; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;" disabled>Stop Monitor</button>
+                </div>
             </div>
             
             <ul class="component-tree" id="component-tree">
@@ -508,14 +512,31 @@ class WebVisualizationServer:
         });
         
         function updateArchitectureMetrics(data) {
+            console.log('Architecture metrics update:', data);
+            
+            // Update performance metrics
             if (data.peripherals) {
-                document.getElementById('perf-operations').textContent = 
-                    (data.peripherals.total_crossbar_operations || 0).toLocaleString();
+                const totalOps = data.peripherals.total_crossbar_operations || 0;
+                document.getElementById('perf-operations').textContent = totalOps.toLocaleString();
+                
+                // Update throughput calculation
+                const throughput = data.peripherals.throughput || 0;
+                document.getElementById('perf-throughput').textContent = throughput.toFixed(1) + ' ops/s';
+                
+                // Update utilization percentage
+                const utilization = totalOps > 0 ? Math.min(100, (totalOps / 1000) * 100) : 0;
+                document.getElementById('perf-utilization').textContent = utilization.toFixed(1) + '%';
             }
             
             if (data.chip && data.chip.energy) {
                 const energy = (data.chip.energy.total_energy || 0) * 1000;
                 document.getElementById('perf-energy').textContent = energy.toFixed(2) + ' mJ';
+            }
+            
+            // Update total metrics in left sidebar
+            if (data.peripherals) {
+                const activeTiles = data.crossbars ? data.crossbars.filter(cb => cb.utilization > 0.1).length / 4 : 0;
+                document.getElementById('active-tiles').textContent = Math.floor(activeTiles);
             }
             
             // Update memory utilization bars
@@ -534,6 +555,19 @@ class WebVisualizationServer:
                     `512 KB × 2 | ${sharedUtil.toFixed(1)}% utilized`;
                 document.getElementById('local-memory-text').textContent = 
                     `64 KB × 8 | ${localUtil.toFixed(1)}% utilized`;
+            }
+            
+            // Update 3D visualization with real data
+            update3DVisualization(data);
+            
+            // Update data flow diagram if visible
+            if (currentView === 'dataflow') {
+                updateDataFlowVisualization(data);
+            }
+            
+            // Update interconnect diagram if visible
+            if (currentView === 'interconnect') {
+                updateInterconnectVisualization(data);
             }
         }
         
@@ -809,6 +843,118 @@ class WebVisualizationServer:
             detailPanel.innerHTML = detailHTML;
         }
         
+        // Update 3D visualization with real-time data
+        function update3DVisualization(data) {
+            if (!chipGroup || !data.crossbars) return;
+            
+            // Update crossbar materials based on utilization
+            chipGroup.traverse(child => {
+                if (child.userData && child.userData.type === 'crossbar') {
+                    const cbData = data.crossbars.find(cb => cb.id === child.userData.id);
+                    if (cbData && child.material) {
+                        const utilization = cbData.utilization || 0;
+                        
+                        // Color based on utilization: blue (idle) -> green -> yellow -> red (busy)
+                        if (utilization > 0.7) {
+                            child.material.color.setHex(0xff6b6b); // Red - very busy
+                        } else if (utilization > 0.4) {
+                            child.material.color.setHex(0xffd93d); // Yellow - moderately busy
+                        } else if (utilization > 0.1) {
+                            child.material.color.setHex(0x4ecdc4); // Green - active
+                        } else {
+                            child.material.color.setHex(0x96ceb4); // Blue-green - idle
+                        }
+                        
+                        // Pulse effect for active crossbars
+                        if (utilization > 0.1) {
+                            const pulse = (Math.sin(Date.now() * 0.005) + 1) * 0.2 + 0.8;
+                            child.material.opacity = pulse;
+                        } else {
+                            child.material.opacity = 0.9;
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update data flow visualization with real-time data
+        function updateDataFlowVisualization(data) {
+            if (!data.execution) return;
+            
+            const svg = d3.select('#dataflow-svg');
+            
+            // Add execution progress indicators
+            const progressData = [
+                { layer: 0, progress: data.execution.current_layer > 0 ? 1.0 : data.execution.progress },
+                { layer: 1, progress: data.execution.current_layer > 1 ? 1.0 : (data.execution.current_layer === 1 ? data.execution.progress : 0) },
+                { layer: 2, progress: data.execution.current_layer > 2 ? 1.0 : (data.execution.current_layer === 2 ? data.execution.progress : 0) }
+            ];
+            
+            // Update layer node opacity based on progress
+            svg.selectAll('.layer-node')
+                .each(function(d, i) {
+                    const progress = progressData[i] ? progressData[i].progress : 0;
+                    d3.select(this).select('rect')
+                        .attr('opacity', 0.4 + progress * 0.6)
+                        .attr('stroke', progress > 0.1 ? '#00d4aa' : '#666')
+                        .attr('stroke-width', progress > 0.1 ? 3 : 1);
+                });
+        }
+        
+        // Update interconnect visualization with real-time data
+        function updateInterconnectVisualization(data) {
+            if (!data.memory && !data.peripherals) return;
+            
+            const svg = d3.select('#interconnect-svg');
+            
+            // Update node utilization based on memory and peripheral activity
+            svg.selectAll('.interconnect-node circle')
+                .attr('stroke-width', function(d) {
+                    if (d.type === 'memory' && data.memory) {
+                        const util = getMemoryUtil(data.memory, 'global_buffer');
+                        return 2 + util * 4;
+                    } else if (d.type === 'controller' && data.peripherals) {
+                        const util = (data.peripherals.total_crossbar_operations || 0) / 1000;
+                        return 2 + Math.min(util, 1) * 4;
+                    }
+                    return 2;
+                })
+                .attr('stroke', function(d) {
+                    const activity = Math.random() * 0.5 + 0.5; // Simulate activity
+                    if (activity > 0.7) return '#ff6b6b';
+                    if (activity > 0.4) return '#ffd93d';
+                    return '#4ecdc4';
+                });
+        }
+        
+        // Monitoring control functions
+        function startArchitectureMonitoring() {
+            console.log('Starting architecture monitoring...');
+            socket.emit('start_monitoring');
+            document.getElementById('arch-start-btn').disabled = true;
+            document.getElementById('arch-stop-btn').disabled = false;
+        }
+        
+        function stopArchitectureMonitoring() {
+            console.log('Stopping architecture monitoring...');
+            socket.emit('stop_monitoring');
+            document.getElementById('arch-start-btn').disabled = false;
+            document.getElementById('arch-stop-btn').disabled = true;
+        }
+        
+        // Enhanced WebSocket event handling
+        socket.on('monitoring_started', function(data) {
+            console.log('Monitoring started:', data);
+            document.getElementById('arch-start-btn').disabled = true;
+            document.getElementById('arch-stop-btn').disabled = false;
+        });
+        
+        socket.on('monitoring_stopped', function(data) {
+            console.log('Monitoring stopped:', data);
+            document.getElementById('arch-start-btn').disabled = false;
+            document.getElementById('arch-stop-btn').disabled = true;
+        });
+        
         // Initialize everything
         document.addEventListener('DOMContentLoaded', function() {
             init3DView();
@@ -827,6 +973,11 @@ class WebVisualizationServer:
                     const componentType = this.dataset.component;
                     selectComponent(componentType);
                 });
+            });
+            
+            // Auto-start monitoring when connected
+            socket.on('connect', function() {
+                setTimeout(startArchitectureMonitoring, 1000);
             });
         });
         
@@ -1390,7 +1541,14 @@ class WebVisualizationServer:
     <div class="header">
         <h1>🎓 CNN to CrossBar Mapping - Educational Tool</h1>
         <p>Interactive learning platform for understanding neural network hardware mapping</p>
-        <a href="/" style="color: #4CAF50;">← Back to Dashboard</a>
+        <div style="margin: 15px 0;">
+            <a href="/" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; text-decoration: none; padding: 10px 20px; border-radius: 25px; margin: 0 10px; font-weight: bold; transition: all 0.3s;">
+                🏠 Dashboard
+            </a>
+            <a href="/architecture" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 10px 20px; border-radius: 25px; margin: 0 10px; font-weight: bold; transition: all 0.3s;">
+                🏗️ Architecture View
+            </a>
+        </div>
     </div>
     
     <div class="container">
@@ -1421,10 +1579,58 @@ class WebVisualizationServer:
         
         <div class="panel">
             <h3>⚡ Real-time Learning</h3>
-            <p>Return to the <a href="/" style="color: #4CAF50;">main dashboard</a> to see 
-            live visualization of how your CNN model executes on the ReRAM hardware.</p>
+            <p>Monitor live execution progress and see how CNNs map to ReRAM hardware:</p>
+            <div id="live-status" style="margin: 15px 0; padding: 15px; background: #333; border-radius: 8px;">
+                <div>Status: <span id="exec-status" style="color: #ffd93d;">Waiting for simulation...</span></div>
+                <div>Current Layer: <span id="current-layer">N/A</span></div>
+                <div>Crossbar Operations: <span id="crossbar-ops">0</span></div>
+                <div>Active Crossbars: <span id="active-crossbars">0</span></div>
+            </div>
+            <p>Return to the <a href="/" style="color: #4CAF50;">main dashboard</a> for detailed visualization.</p>
         </div>
     </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+        let socket = io();
+        
+        socket.on('connect', function() {
+            document.getElementById('exec-status').textContent = 'Connected to simulator';
+            document.getElementById('exec-status').style.color = '#4CAF50';
+            
+            // Auto-start monitoring for educational purposes
+            setTimeout(() => {
+                socket.emit('start_monitoring');
+            }, 1000);
+        });
+        
+        socket.on('stats_update', function(data) {
+            // Update educational dashboard with live data
+            if (data.execution) {
+                if (data.execution.running) {
+                    document.getElementById('exec-status').textContent = 'Simulation running...';
+                    document.getElementById('exec-status').style.color = '#4CAF50';
+                    document.getElementById('current-layer').textContent = 
+                        `Layer ${data.execution.current_layer + 1} of ${data.execution.total_layers}`;
+                } else {
+                    document.getElementById('exec-status').textContent = 'Simulation complete';
+                    document.getElementById('exec-status').style.color = '#ffd93d';
+                }
+            }
+            
+            if (data.peripherals) {
+                document.getElementById('crossbar-ops').textContent = 
+                    (data.peripherals.total_crossbar_operations || 0).toLocaleString();
+                document.getElementById('active-crossbars').textContent = 
+                    data.peripherals.active_crossbars || 0;
+            }
+        });
+        
+        socket.on('disconnect', function() {
+            document.getElementById('exec-status').textContent = 'Disconnected';
+            document.getElementById('exec-status').style.color = '#f44336';
+        });
+    </script>
 </body>
 </html>
             """)
@@ -1656,18 +1862,48 @@ class WebVisualizationServer:
             adc_utilization = min(1.0, total_adc_conversions / max_conversions) if max_conversions > 0 else 0.0
             dac_utilization = min(1.0, total_dac_conversions / max_conversions) if max_conversions > 0 else 0.0
             
+            # Calculate throughput (operations per second)
+            current_time = time.time()
+            if not hasattr(self, '_last_ops_time'):
+                self._last_ops_time = current_time
+                self._last_ops_count = total_crossbar_ops
+                throughput = 0.0
+            else:
+                time_diff = current_time - self._last_ops_time
+                ops_diff = total_crossbar_ops - self._last_ops_count
+                if time_diff > 0:
+                    throughput = ops_diff / time_diff
+                else:
+                    throughput = 0.0
+                
+                # Update for next calculation
+                self._last_ops_time = current_time
+                self._last_ops_count = total_crossbar_ops
+            
+            # Add network topology data for interconnect visualization
+            network_data = {
+                'supertiles': len(self.execution_engine.chip.supertiles),
+                'tiles_per_supertile': len(self.execution_engine.chip.supertiles[0].tiles) if self.execution_engine.chip.supertiles else 0,
+                'crossbars_per_tile': len(self.execution_engine.chip.supertiles[0].tiles[0].crossbars) if self.execution_engine.chip.supertiles and self.execution_engine.chip.supertiles[0].tiles else 0,
+                'total_nodes': len(self.execution_engine.chip.supertiles) + 2  # SuperTiles + Memory Controller + MCU
+            }
+            
             return {
                 'chip': chip_stats,
                 'crossbars': crossbar_data,
                 'memory': memory_data,
                 'execution': execution_data,
+                'network': network_data,
                 'peripherals': {
                     'adc_utilization': float(adc_utilization),
                     'dac_utilization': float(dac_utilization),
                     'adc_conversions': int(total_adc_conversions),
                     'dac_conversions': int(total_dac_conversions),
-                    'total_crossbar_operations': int(total_crossbar_ops)
-                }
+                    'total_crossbar_operations': int(total_crossbar_ops),
+                    'throughput': float(throughput),
+                    'active_crossbars': len([cb for cb in crossbar_data if cb['utilization'] > 0.1])
+                },
+                'timestamp': current_time
             }
             
         except Exception as e:
