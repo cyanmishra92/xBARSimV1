@@ -68,7 +68,8 @@ def create_test_hardware() -> ReRAMChip:
     tile_config = TileConfig(
         crossbars_per_tile=4,
         crossbar_config=crossbar_config,
-        local_buffer_size=32
+        local_buffer_size=32,
+        adcs_per_tile=64  # Ensure enough ADCs for one crossbar
     )
     
     supertile_config = SuperTileConfig(
@@ -129,7 +130,7 @@ def test_basic_functionality():
         print(f"   ✓ Successfully mapped {len(layer_mappings)} layers to hardware")
     except Exception as e:
         print(f"   ✗ Weight mapping failed: {e}")
-        return False
+        assert False, f"Weight mapping failed: {e}"
     
     # 6. Test inference
     print("6. Testing inference execution...")
@@ -159,11 +160,11 @@ def test_basic_functionality():
                       
         else:
             print(f"   ✗ Inference failed: {result.get('error', 'Unknown error')}")
-            return False
+            assert False, f"Inference failed: {result.get('error', 'Unknown error')}"
             
     except Exception as e:
         print(f"   ✗ Inference execution failed: {e}")
-        return False
+        assert False, f"Inference execution failed: {e}"
     
     # 7. Test crossbar operations
     print("7. Testing crossbar operations...")
@@ -191,14 +192,14 @@ def test_basic_functionality():
         
     except Exception as e:
         print(f"   ✗ Crossbar operation test failed: {e}")
-        return False
+        assert False, f"Crossbar operation test failed: {e}"
     
     print("\n" + "=" * 50)
     print("✅ All tests passed successfully!")
     print("🎉 ReRAM Crossbar Simulator is working correctly!")
     print("=" * 50)
     
-    return True
+    assert True  # All tests passed
 
 def test_performance_analysis():
     """Test performance analysis features"""
