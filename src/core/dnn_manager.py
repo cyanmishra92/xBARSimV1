@@ -192,7 +192,7 @@ class HardwareRequirement:
         total_weights = self.dnn_config.total_parameters
         
         # Account for precision - multiple crossbars may be needed for multi-bit weights
-        precision_factor = max(1, self.dnn_config.precision // 1)  # Simplified
+        precision_factor = max(1, self.dnn_config.precision if self.dnn_config.precision > 0 else 8)
         
         min_crossbars = math.ceil(total_weights * precision_factor / crossbar_capacity)
         return min_crossbars

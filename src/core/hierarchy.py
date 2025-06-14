@@ -138,10 +138,12 @@ class ProcessingTile:
         )
         
         if config.adc_sharing:
-            # Shared ADCs among crossbars
+            # Shared ADCs among crossbars - ensure sufficient ADCs for largest crossbar
+            max_crossbar_cols = max(crossbar.cols for crossbar in self.crossbars)
+            num_shared_adcs = max(config.adcs_per_tile, max_crossbar_cols)
             self.peripheral_manager = PeripheralManager(
                 num_rows=total_rows,
-                num_cols=config.adcs_per_tile,  # Reduced number of ADCs
+                num_cols=num_shared_adcs,
                 adc_config=edge_adc_config,
                 dac_config=edge_dac_config,
                 sense_amp_config=edge_sense_amp_config,

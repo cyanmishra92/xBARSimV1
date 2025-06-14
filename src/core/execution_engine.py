@@ -631,7 +631,8 @@ class ExecutionEngine:
                 output_data = 1 / (1 + np.exp(-np.clip(output_data, -500, 500)))
             elif activation_type == 'softmax':
                 exp_scores = np.exp(output_data - np.max(output_data))
-                output_data = exp_scores / np.sum(exp_scores)
+                sum_exp = np.sum(exp_scores)
+                output_data = exp_scores / max(sum_exp, 1e-15)  # Protect against division by zero
                 
         return output_data
         
@@ -706,7 +707,8 @@ class ExecutionEngine:
         elif activation_type == 'softmax':
             shift = input_data - np.max(input_data, axis=-1, keepdims=True)
             exp_scores = np.exp(shift)
-            return exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
+            sum_exp = np.sum(exp_scores, axis=-1, keepdims=True)
+            return exp_scores / np.maximum(sum_exp, 1e-15)  # Protect against division by zero
         else:
             return input_data
             

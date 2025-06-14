@@ -366,17 +366,11 @@ class BufferManager:
         data_size_bits = num_words * buffer['config'].word_size_bits
 
         # Ensure read does not go beyond allocated region.
-        # This check might need refinement based on how region_size and offset are defined (words vs bytes).
         # If offset and region_size are in words, then offset + num_words should not exceed region_size.
         if (offset + num_words) > region_size:
-            logging.warning(f"Read of {num_words} words from offset {offset} exceeds region {region_id} (size {region_size} words) in {buffer_name}. Clamping read size.")
-            # Adjust num_words to read only up to the end of the region
-            # This simplistic clamping might not be what is always desired.
-            # A more robust solution might involve how data_size was calculated by the caller.
-            clamped_num_words = region_size - offset
-            if clamped_num_words <= 0: # Should not happen if offset < region_size initially
-                return None
-            data_size_bits = clamped_num_words * buffer['config'].word_size_bits
+            raise ValueError(f"Read of {num_words} words from offset {offset} exceeds region {region_id} "
+                           f"(size {region_size} words) in {buffer_name}. "
+                           f"Maximum readable words from this offset: {region_size - offset}")
 
 
         return self.controllers[buffer_name].schedule_request(
