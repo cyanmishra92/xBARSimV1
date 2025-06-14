@@ -21,14 +21,14 @@ Monitor your ReRAM crossbar execution in real-time to:
 
 ### Usage
 ```bash
-# Basic live visualization
-python main.py --execute --live-viz
+# Basic live visualization (recommended starting point)
+python main.py --model tiny_cnn --execute --live-viz
 
-# Live visualization with cycle-accurate simulation
-python main.py --execute --live-viz --cycle-accurate
+# Live visualization with cycle-accurate simulation (slower but more detailed)
+python main.py --model tiny_cnn --execute --live-viz --cycle-accurate
 
 # Live visualization with comprehensive analysis
-python main.py --execute --live-viz --visualize --verbose
+python main.py --model sample_cnn --execute --live-viz --visualize --verbose
 ```
 
 ### What You'll See
@@ -85,7 +85,11 @@ Interactively explore your ReRAM chip architecture to:
 
 ### Usage
 ```bash
+# Interactive architecture exploration (requires interactive terminal)
 python main.py --explore-arch
+
+# Note: This feature requires an interactive terminal environment
+# and may not work in automated scripts or some IDEs
 ```
 
 ### Navigation Menu
@@ -100,6 +104,12 @@ python main.py --explore-arch
 6. 📊 Detailed Statistics
 q. 🚪 Quit Explorer
 ```
+
+### How to Navigate
+- **Enter a number (1-6)** and press Enter to select menu options
+- **Enter 'q'** and press Enter to quit any menu level
+- **Use arrow keys** for scrolling through longer displays
+- **Press Ctrl+C** to force exit if needed
 
 ### Example Exploration Session
 1. **Chip Overview**: See total crossbars, ReRAM cells, current activity
@@ -119,14 +129,14 @@ Generate detailed post-execution analysis including:
 
 ### Usage
 ```bash
-# Generate comprehensive report
-python main.py --execute --visualize
+# Generate comprehensive report (start with small model)
+python main.py --model tiny_cnn --execute --visualize
 
 # Verbose output with detailed logging
-python main.py --execute --visualize --verbose
+python main.py --model sample_cnn --execute --visualize --verbose
 
 # Save results to JSON file
-python main.py --execute --visualize --output results.json
+python main.py --model tiny_cnn --execute --visualize --output results.json
 ```
 
 ### Report Sections
@@ -189,19 +199,19 @@ Layer 0 (convolution_2d):
 
 ### Example 1: Debug Performance Issues
 ```bash
-# Run with live monitoring to identify bottlenecks
-python main.py --execute --live-viz --cycle-accurate --verbose
+# Run with live monitoring to identify bottlenecks (note: slower execution)
+python main.py --model tiny_cnn --execute --live-viz --cycle-accurate --verbose
 ```
 
 ### Example 2: Comprehensive System Analysis  
 ```bash
 # Generate complete analysis with all visualizations
-python main.py --execute --live-viz --visualize --explore-arch --output analysis.json
+python main.py --model sample_cnn --execute --live-viz --visualize --output analysis.json
 ```
 
 ### Example 3: Hardware Exploration
 ```bash
-# Explore architecture without running inference
+# Explore architecture without running inference (interactive terminal required)
 python main.py --explore-arch
 ```
 
@@ -251,16 +261,128 @@ python main.py --explore-arch
 
 ## 🔧 Troubleshooting
 
-### Live Visualization Not Working
-- Ensure your terminal supports ANSI escape sequences
-- Try running with `--visualize` instead for static reports
+### Live Visualization Issues
 
-### Architecture Explorer Input Issues
-- Use single characters (1, 2, 3, etc.) for menu navigation
-- Press 'q' to quit any menu level
+**Live Visualization Not Updating**
+```bash
+# Ensure your terminal supports ANSI escape sequences
+echo -e "\033[31mRed text\033[0m"  # Should display red text
+
+# If not supported, use static visualization instead:
+python main.py --model tiny_cnn --execute --visualize  # Remove --live-viz
+```
+
+**Progress Appears Stuck**
+```bash
+# This is normal for small models that execute quickly
+# Try a larger model to see more gradual progress:
+python main.py --model lenet --execute --live-viz
+```
+
+### Architecture Explorer Issues
+
+**EOF Error or Input Issues**
+```bash
+# Ensure you're running in an interactive terminal
+# Architecture explorer doesn't work in:
+# - Non-interactive environments
+# - Some IDEs
+# - Automated scripts
+
+# Solution: Use a proper terminal:
+# Linux/Mac: bash/zsh terminal
+# Windows: WSL, PowerShell, or Command Prompt
+```
+
+**Menu Navigation Problems**
+```bash
+# Correct navigation:
+# 1. Type a number (1-6) and press Enter
+# 2. Type 'q' and press Enter to quit
+# 3. Use Ctrl+C to force exit if stuck
+
+# Incorrect: Don't just press numbers without Enter
+```
 
 ### Performance Issues
-- Use `--cycle-accurate` only when needed (slower but more accurate)
-- Reduce `--max-cycles` for faster execution during development
+
+**Slow Visualization Performance**
+```bash
+# Cycle-accurate simulation is much slower but more detailed
+# For faster testing, avoid --cycle-accurate:
+python main.py --model tiny_cnn --execute --live-viz  # Faster
+
+# For detailed analysis, use cycle-accurate with smaller models:
+python main.py --model tiny_cnn --execute --live-viz --cycle-accurate  # Slower but detailed
+```
+
+**High Memory Usage**
+```bash
+# Use smaller models for testing:
+python main.py --model tiny_cnn --execute --live-viz    # ~1-3 seconds
+python main.py --model sample_cnn --execute --live-viz  # ~10-30 seconds  
+python main.py --model lenet --execute --live-viz       # ~1-5 minutes
+
+# Reduce max execution cycles if needed:
+python main.py --model sample_cnn --execute --live-viz --max-cycles 10000
+```
+
+### Output Issues
+
+**Missing JSON Output Files**
+```bash
+# Ensure output directory exists:
+mkdir -p results
+python main.py --model tiny_cnn --execute --visualize --output results/analysis.json
+
+# Check file permissions:
+ls -la results/
+```
+
+**Incomplete Visualization Reports**
+```bash
+# Some visualizations require completed execution:
+# Ensure simulation completes successfully before expecting full reports
+
+# Check for errors in verbose mode:
+python main.py --model tiny_cnn --execute --visualize --verbose
+```
+
+### Terminal Compatibility
+
+**ANSI Color Issues**
+```bash
+# Test terminal color support:
+python -c "print('\033[31mRed\033[32mGreen\033[33mYellow\033[0mNormal')"
+
+# If colors don't appear, your terminal may not support ANSI
+# Use static visualization instead:
+python main.py --model tiny_cnn --execute --visualize
+```
+
+**WSL-Specific Issues**
+```bash
+# Ensure proper WSL terminal setup:
+# Use Windows Terminal or WSL terminal, not Windows Command Prompt
+# Install unicode font support if symbols appear as boxes
+```
+
+### Recent Fixes & Updates
+
+**ADC Units Error (FIXED)**
+The "PeripheralManager lacks sufficient ADC units" error has been resolved in recent updates. If you still encounter this:
+```bash
+# Update to latest version:
+git pull origin main
+python main.py --model tiny_cnn --execute --live-viz  # Should work now
+```
+
+**Import Path Issues**
+If you encounter module import errors when running examples:
+```bash
+# Add src to Python path:
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+# Or use the main.py interface which handles paths automatically
+```
 
 This visualization system provides unprecedented insight into ReRAM crossbar neural network accelerator operation, making it an invaluable tool for research, development, and education.

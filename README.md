@@ -10,15 +10,22 @@ A comprehensive, cycle-accurate simulator for ReRAM crossbar-based neural networ
 
 ```bash
 # Clone and setup
-git clone <repository-url>
+git clone https://github.com/cyanmishra92/xBARSimV1.git
 cd xBARSimV1
+
+# Create virtual environment (recommended)
+python -m venv xbarsim_env
+source xbarsim_env/bin/activate  # Linux/Mac
+# or: xbarsim_env\Scripts\activate  # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Run basic simulation
-python main.py --execute --visualize
+# Verify installation
+python main.py --model tiny_cnn --execute
 
-# Run comprehensive test
-python examples/simple_test.py
+# Run with visualization
+python main.py --model sample_cnn --execute --visualize
 
 # Try different models
 python examples/demo_models.py
@@ -102,82 +109,156 @@ ReRAM Chip
 ## 💻 Installation
 
 ### Requirements
-- Python 3.8+
-- NumPy, Matplotlib (optional), SciPy
-- Works on Linux, macOS, Windows (WSL recommended)
+- **Python**: 3.8+ (tested on 3.8-3.11)
+- **Operating System**: Linux, macOS, Windows (WSL recommended for Windows)
+- **System Dependencies**: Build tools for scientific computing (see below)
 
-### Install
+### System Setup (Ubuntu/WSL)
 ```bash
-pip install numpy matplotlib seaborn scipy pandas
+# Install system dependencies
+sudo apt-get update
+sudo apt-get install build-essential python3-dev python3-venv
+```
 
-# Or use requirements file
+### Python Environment Setup
+```bash
+# 1. Create virtual environment (strongly recommended)
+python -m venv xbarsim_env
+source xbarsim_env/bin/activate  # Linux/Mac
+# Windows: xbarsim_env\Scripts\activate
+
+# 2. Install all dependencies
 pip install -r requirements.txt
+
+# 3. Verify installation
+python main.py --model tiny_cnn --execute
+```
+
+### Manual Installation (Core Dependencies Only)
+```bash
+# Minimal installation for basic functionality
+pip install numpy>=1.21.0 matplotlib>=3.5.0 scipy>=1.7.0 pandas>=1.3.0
+```
+
+### Development Installation
+```bash
+# For contributors and developers
+pip install -r requirements.txt
+# Includes testing (pytest), linting (black, flake8), and documentation tools
 ```
 
 ## 🚀 Quick Examples
 
-### Example 1: Live Visualization (Real-time Monitoring) 🆕
+### Example 1: Basic Simulation (Start Here!)
 ```bash
-# Basic live visualization
-python main.py --execute --live-viz
+# Run default model with basic output
+python main.py --model tiny_cnn --execute
 
-# Live visualization with comprehensive analysis
-python main.py --execute --live-viz --visualize --verbose
+# Run with detailed visualization
+python main.py --model sample_cnn --execute --visualize
 ```
 
-### Example 2: Interactive Architecture Explorer 🆕
+### Example 2: Live Visualization (Real-time Monitoring) 🆕
 ```bash
-# Explore chip architecture interactively
+# Basic live visualization during execution
+python main.py --model tiny_cnn --execute --live-viz
+
+# Live visualization with comprehensive analysis
+python main.py --model sample_cnn --execute --live-viz --visualize --verbose
+```
+
+### Example 3: Interactive Architecture Explorer 🆕
+```bash
+# Explore chip architecture interactively (no execution required)
 python main.py --explore-arch
 
 # Combined: execution + live monitoring + architecture exploration
-python main.py --execute --live-viz --explore-arch
+python main.py --model tiny_cnn --execute --live-viz --explore-arch
 ```
 
-### Example 3: Comprehensive Analysis & Reporting 🆕
+### Example 4: Comprehensive Analysis & Reporting 🆕
 ```bash
 # Generate detailed hardware analysis report
-python main.py --execute --visualize --output results.json
+python main.py --model sample_cnn --execute --visualize --output results.json
 
 # Full analysis with all visualization features
-python main.py --execute --live-viz --visualize --verbose --output complete_analysis.json
+python main.py --model lenet --execute --live-viz --visualize --verbose --output analysis.json
 ```
 
-### Example 4: Custom Hardware
+### Example 5: Custom Hardware (Programmatic Usage)
 ```python
-from src import *
+#!/usr/bin/env python3
+import sys
+import os
+import numpy as np
 
-# Create custom chip
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from core.hierarchy import ReRAMChip, ChipConfig, SuperTileConfig, TileConfig
+from core.crossbar import CrossbarConfig
+from core.dnn_manager import DNNManager, DNNConfig, LayerConfig, LayerType
+from core.execution_engine import ExecutionEngine
+
+# Create custom chip configuration
 crossbar_config = CrossbarConfig(rows=64, cols=64)
-chip = create_default_chip(crossbar_size=(64, 64), num_crossbars=8)
+tile_config = TileConfig(crossbars_per_tile=4, crossbar_config=crossbar_config)
+supertile_config = SuperTileConfig(tiles_per_supertile=2, tile_config=tile_config)
+chip_config = ChipConfig(supertiles_per_chip=1, supertile_config=supertile_config)
 
-# Create simple CNN
-dnn_config = create_simple_cnn(input_shape=(16, 16, 1), num_classes=5)
+# Create chip and DNN
+chip = ReRAMChip(chip_config)
+layers = [
+    LayerConfig(layer_type=LayerType.CONV2D, input_shape=(8, 8, 1), 
+                output_shape=(6, 6, 4), kernel_size=(3, 3), weights_shape=(3, 3, 1, 4)),
+    LayerConfig(layer_type=LayerType.DENSE, input_shape=(144,), 
+                output_shape=(3,), weights_shape=(144, 3))
+]
+dnn_config = DNNConfig("CustomCNN", layers, (8, 8, 1), (3,), 8)
 
 # Run simulation
-result = quick_simulation(execute_inference=True)
+dnn_manager = DNNManager(dnn_config, chip)
+weight_data = {"layer_0": np.random.randn(3, 3, 1, 4), "layer_1": np.random.randn(144, 3)}
+dnn_manager.map_dnn_to_hardware(weight_data)
+
+engine = ExecutionEngine(chip, dnn_manager)
+result = engine.execute_inference(np.random.randn(8, 8, 1))
+print(f"Predicted class: {result['inference_result']['predicted_class']}")
 ```
 
-### Example 5: Multiple Models
+### Example 6: Multiple Models Demo
 ```bash
+# Run all example models with comparisons
 python examples/demo_models.py
+
+# Run specific examples
+python examples/simple_test.py
 ```
 
-### Example 6: Running Different Models with `main.py`
+## 🧠 Available Neural Network Models
 
-The `main.py` script can run different predefined neural network models using the `--model` argument.
-The default model is `sample_cnn`. Other available models currently include `tiny_cnn` and `lenet`.
+The simulator includes three predefined models accessible via the `--model` flag:
 
+### Model Specifications
+| Model | Input Size | Classes | Parameters | Layers | Use Case |
+|-------|------------|---------|------------|---------|----------|
+| `tiny_cnn` | 8×8×1 | 3 | 144 | Conv→Pool→Dense | Quick testing |
+| `sample_cnn` | 16×16×1 | 10 | 5,292 | Conv→Pool→Dense | Medium complexity |
+| `lenet` | 28×28×1 | 10 | ~61K | LeNet-5 architecture | Full CNN demo |
+
+### Running Different Models
 ```bash
-# Run the default SampleCNN model (same as without --model)
+# Quick test model (fastest execution)
+python main.py --model tiny_cnn --execute
+
+# Default model (good balance of complexity and speed)
 python main.py --model sample_cnn --execute --visualize
 
-# Run TinyCNN model
-python main.py --model tiny_cnn --execute --visualize
-
-# Run LeNet model
-python main.py --model lenet --execute --visualize
+# Full LeNet-5 model (most comprehensive)
+python main.py --model lenet --execute --visualize --verbose
 ```
+
+**Note**: If no `--model` is specified, `sample_cnn` is used by default.
 
 ## 🎯 New Visualization Features
 
@@ -515,42 +596,341 @@ python main.py --model lenet --execute --visualize
 2. **Medium**: 2 SuperTiles, 4 Tiles each, 4 Crossbars each
 3. **Large**: 4 SuperTiles, 8 Tiles each, 8 Crossbars each
 
+## 🧪 Testing & Validation
+
+### Quick Installation Verification
+```bash
+# Verify basic functionality after installation
+python main.py --model tiny_cnn --execute
+# Expected: Should complete without errors and show "Simulation completed successfully!"
+```
+
+### Running the Test Suite
+
+#### Option 1: Direct Python Execution (Recommended)
+Due to pytest compatibility issues in some environments, individual test execution is more reliable:
+
+```bash
+# Test buffer operations
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from tests.test_buffer_write_size import test_write_request_size_matches_data_length
+test_write_request_size_matches_data_length()
+print('✓ Buffer write size test passed')
+"
+
+# Test cycle-accurate microcontroller
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from tests.test_cycle_accurate_mcu import test_cycle_accurate_mcu
+test_cycle_accurate_mcu()
+print('✓ Cycle-accurate MCU test passed')
+"
+
+# Test memory management
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from tests.test_microcontroller_buffer import test_microcontroller_buffer_integration
+test_microcontroller_buffer_integration()
+print('✓ Microcontroller buffer test passed')
+"
+```
+
+#### Option 2: pytest (if working in your environment)
+```bash
+# Install pytest if not already installed
+pip install pytest
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test files
+python -m pytest tests/test_buffer_write_size.py -v
+python -m pytest tests/test_cycle_accurate_mcu.py -v
+
+# Run with coverage (requires pytest-cov)
+python -m pytest tests/ --cov=src --cov-report=html
+```
+
+#### Option 3: Run All Tests with Script
+Create a test runner script:
+
+```bash
+# Create test_runner.py
+cat > test_runner.py << 'EOF'
+#!/usr/bin/env python3
+import sys
+import os
+import traceback
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+def run_test(test_module, test_function, test_name):
+    try:
+        module = __import__(f'tests.{test_module}', fromlist=[test_function])
+        test_func = getattr(module, test_function)
+        test_func()
+        print(f'✓ {test_name} PASSED')
+        return True
+    except Exception as e:
+        print(f'✗ {test_name} FAILED: {e}')
+        traceback.print_exc()
+        return False
+
+def main():
+    tests = [
+        ('test_buffer_write_size', 'test_write_request_size_matches_data_length', 'Buffer Write Size'),
+        ('test_buffer_write_size', 'test_np_array_write_records_expected_size', 'NumPy Array Write'),
+        ('test_cycle_accurate_mcu', 'test_cycle_accurate_mcu', 'Cycle Accurate MCU'),
+        ('test_microcontroller_buffer', 'test_microcontroller_buffer_integration', 'MCU Buffer Integration'),
+    ]
+    
+    passed = 0
+    total = len(tests)
+    
+    print("Running xBARSimV1 Test Suite")
+    print("=" * 40)
+    
+    for test_module, test_function, test_name in tests:
+        if run_test(test_module, test_function, test_name):
+            passed += 1
+        print()
+    
+    print("=" * 40)
+    print(f"Results: {passed}/{total} tests passed")
+    
+    if passed == total:
+        print("🎉 All tests passed!")
+        return 0
+    else:
+        print("❌ Some tests failed!")
+        return 1
+
+if __name__ == '__main__':
+    sys.exit(main())
+EOF
+
+# Run the test suite
+python test_runner.py
+```
+
+### Performance Benchmarks
+```bash
+# Basic performance test with tiny model
+time python main.py --model tiny_cnn --execute
+# Expected: ~1-3 seconds
+
+# Medium complexity test
+time python main.py --model sample_cnn --execute --visualize
+# Expected: ~10-30 seconds
+
+# Full complexity test
+time python main.py --model lenet --execute --visualize
+# Expected: ~1-5 minutes
+```
+
+### Validation Tests
+```bash
+# Test all models work
+python main.py --model tiny_cnn --execute && echo "✓ TinyCNN works"
+python main.py --model sample_cnn --execute && echo "✓ SampleCNN works"
+python main.py --model lenet --execute && echo "✓ LeNet works"
+
+# Test visualization features
+python main.py --model tiny_cnn --execute --visualize && echo "✓ Visualization works"
+python main.py --explore-arch && echo "✓ Architecture explorer works"
+
+# Test output generation
+python main.py --model tiny_cnn --execute --output test_output.json && echo "✓ JSON output works"
+```
+
+### Expected Output Verification
+A successful test run should show:
+```
+============================================================
+ReRAM Crossbar Simulator v1.0
+============================================================
+...
+5. Running inference...
+   ✓ Inference completed successfully!
+   Predicted class: [0-9]
+   Execution cycles: [number]
+============================================================
+Simulation completed successfully!
+============================================================
+```
+
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Common Issues & Solutions
+
+#### **Installation & Environment Issues**
+
+**Q: Import errors when running examples**
+```bash
+# Error: ModuleNotFoundError: No module named 'src'
+# Solution: Add src to Python path
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
+# Or in Python scripts:
+import sys; sys.path.insert(0, 'src')
+```
+
+**Q: pytest segmentation fault**
+```bash
+# Problem: pytest crashes with segfault
+# Solution: Use direct Python execution instead
+python3 -c "import sys; sys.path.insert(0, 'src'); from tests.test_name import test_function; test_function()"
+```
+
+**Q: Package dependency conflicts**
+```bash
+# Solution: Use fresh virtual environment
+python -m venv fresh_env
+source fresh_env/bin/activate
+pip install -r requirements.txt
+```
+
+#### **Simulation Runtime Issues**
+
+**Q: "PeripheralManager lacks sufficient ADC units" (FIXED in latest version)**
+```bash
+# This error has been fixed in the latest version
+# If you still see it, update to the latest code:
+git pull origin main
+```
 
 **Q: "Not enough crossbars" error**
-```python
-# Solution: Increase hardware size or reduce DNN
-chip_config.supertiles_per_chip = 4  # More hardware
-# OR
-dnn_config.precision = 4  # Smaller DNN
+```bash
+# Solution 1: Use smaller model
+python main.py --model tiny_cnn --execute
+
+# Solution 2: Increase hardware size in code
+# Edit main.py create_default_chip_config() to increase:
+# - supertiles_per_chip = 4
+# - tiles_per_supertile = 8  
+# - crossbars_per_tile = 8
 ```
 
 **Q: Memory allocation failures**
-```python
-# Solution: Increase buffer sizes
-tile_config.local_buffer_size = 128  # Increase from 64
-```
-
-**Q: Slow simulation**
-```python
-# Solution: Disable cycle-accurate simulation
-execution_config = ExecutionConfig(
-    enable_cycle_accurate_simulation=False
-)
-```
-
-### Debug Mode
 ```bash
-python main.py --execute --verbose --log-level DEBUG
+# Solution: Use models with fewer parameters
+python main.py --model tiny_cnn --execute  # Smallest model
+# Or increase buffer sizes in chip configuration
 ```
 
-### Performance Tips
-1. Start with small models for testing
-2. Disable cycle-accurate simulation for faster results
-3. Use `quick_simulation()` for rapid prototyping
-4. Enable detailed logging only when needed
+**Q: Slow simulation performance**
+```bash
+# Solution 1: Disable cycle-accurate simulation (faster but less precise)
+python main.py --model tiny_cnn --execute  # No --cycle-accurate flag
+
+# Solution 2: Use smaller models for testing
+python main.py --model tiny_cnn --execute  # Instead of lenet
+
+# Solution 3: Reduce max cycles
+python main.py --model sample_cnn --execute --max-cycles 10000
+```
+
+#### **Visualization Issues**
+
+**Q: Live visualization not working**
+```bash
+# Check if your terminal supports ANSI escape sequences
+echo -e "\033[31mRed text\033[0m"  # Should show red text
+# If not supported, use static visualization:
+python main.py --model tiny_cnn --execute --visualize  # Remove --live-viz
+```
+
+**Q: Architecture explorer input issues**
+```bash
+# Use single character inputs only: 1, 2, 3, q
+# Press Enter after each selection
+# Use 'q' to quit any menu level
+```
+
+#### **Output & Results Issues**
+
+**Q: JSON output file not created**
+```bash
+# Ensure directory exists and is writable
+mkdir -p results
+python main.py --model tiny_cnn --execute --output results/test.json
+```
+
+**Q: Unexpected predicted class results**
+```bash
+# This is normal - models use random weights for simulation
+# The focus is on hardware simulation, not ML accuracy
+```
+
+### Debugging & Logging
+
+#### Enable Debug Mode
+```bash
+# Verbose output with debug information
+python main.py --model tiny_cnn --execute --verbose --log-level DEBUG
+
+# Save debug output to file
+python main.py --model tiny_cnn --execute --verbose --log-file debug.log
+```
+
+#### Performance Monitoring
+```bash
+# Time execution
+time python main.py --model tiny_cnn --execute
+
+# Monitor memory usage (Linux/Mac)
+/usr/bin/time -v python main.py --model tiny_cnn --execute
+```
+
+### Environment-Specific Issues
+
+#### **WSL (Windows Subsystem for Linux)**
+```bash
+# Install required system packages
+sudo apt-get update
+sudo apt-get install build-essential python3-dev
+
+# Fix locale warnings (optional)
+sudo locale-gen en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+```
+
+#### **macOS**
+```bash
+# Install Xcode command line tools
+xcode-select --install
+
+# Use Homebrew Python if needed
+brew install python@3.11
+```
+
+#### **Conda Environments**
+```bash
+# Create clean conda environment
+conda create -n xbarsim python=3.11
+conda activate xbarsim
+pip install -r requirements.txt
+```
+
+### Performance Tips & Best Practices
+
+1. **Start Small**: Always test with `tiny_cnn` first
+2. **Use Virtual Environments**: Isolate dependencies to avoid conflicts  
+3. **Monitor Resources**: Large models can consume significant memory
+4. **Gradual Complexity**: tiny_cnn → sample_cnn → lenet
+5. **Save Outputs**: Use `--output` flag to save results for analysis
+6. **Check System Requirements**: Ensure adequate RAM for larger simulations
+
+### Getting Help
+
+If you encounter issues not covered here:
+
+1. **Check Error Messages**: Most errors include helpful information
+2. **Test with Tiny Model**: `python main.py --model tiny_cnn --execute`
+3. **Enable Verbose Output**: Add `--verbose --log-level DEBUG`
+4. **Check System Resources**: Monitor CPU and memory usage
+5. **Update Code**: `git pull origin main` for latest fixes
 
 ## 🎓 Learning Resources
 
