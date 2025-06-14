@@ -1202,6 +1202,14 @@ class WebVisualizationServer:
 <body>
     <div class="header">
         <h1>🔬 ReRAM Crossbar Simulator - Real-Time Dashboard</h1>
+        <div style="margin: 10px 0;">
+            <a href="/architecture" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 10px 20px; border-radius: 25px; margin: 0 10px; font-weight: bold; transition: all 0.3s;">
+                🏗️ Detailed Architecture View
+            </a>
+            <a href="/educational" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; text-decoration: none; padding: 10px 20px; border-radius: 25px; margin: 0 10px; font-weight: bold; transition: all 0.3s;">
+                🎓 Educational Tool
+            </a>
+        </div>
         <div id="status" class="status disconnected">Disconnected</div>
         <button id="startBtn" onclick="startMonitoring()">Start Monitoring</button>
         <button id="stopBtn" onclick="stopMonitoring()" disabled>Stop Monitoring</button>
